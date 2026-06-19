@@ -7,8 +7,9 @@
  *
  * Gestures (ported faithfully from the app): pan (drag empty space / two-finger
  * swipe), pinch-zoom, move a node, draw a link from the selected node's
- * connect-ring, bow an edge's curvature, drag a loop badge, double-click to add
- * a variable or rename a node. Right-click is a deliberate no-op (parity).
+ * connect-ring, bow an edge's curvature, drag a loop badge, double-click (mouse)
+ * or double-tap (touch) to add a variable or rename a node. Right-click is a
+ * deliberate no-op (parity).
  */
 
 import { GraphView } from "../engine/engine";
@@ -16,6 +17,7 @@ import { Camera, Point } from "./camera";
 import { NodeBox, hitEdge, hitNode } from "./geometry";
 import { Scene } from "./painter";
 import { routePointerDown } from "./pointerRouting";
+import { Tap, isDoubleTap } from "./tapGesture";
 
 export type PointerMode = "idle" | "pan" | "moveNode" | "moveBadge" | "drawLink" | "bowEdge" | "pinch";
 
@@ -63,6 +65,9 @@ export class PointerInteraction {
   private bowLink: { curvature?: number } | null = null;
   private bowSource: string | null = null;
   private bowTarget: string | null = null;
+  /** Last simple touch/pen tap, for synthesizing double-taps (iOS has no
+   *  reliable `dblclick` on touch). Null when none is pending or one was used. */
+  private lastTap: Tap | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement, private readonly host: PointerHost) {
     host.listen(canvas, "pointerdown", (e) => this.onPointerDown(e as PointerEvent));
@@ -250,6 +255,26 @@ export class PointerInteraction {
       await this.host.commitBow(this.bowSource, this.bowTarget, this.bowLink.curvature);
     }
 
+    // iOS WebKit doesn't fire `dblclick` for touch, so synthesize a double-tap
+    // from the pointer stream: two quick, stationary single-finger taps run the
+    // same add/rename action as a desktop double-click. Mouse keeps using the
+    // native `dblclick` handler, so guard on pointer type to avoid firing twice.
+    // Runs synchronously (no prior `await` on a stationary tap) so a node's
+    // rename input still focuses inside the gesture and iOS shows the keyboard.
+    if (e.pointerType !== "mouse" && this.pointers.size === 0) {
+      if (this.moved) {
+        this.lastTap = null; // a drag breaks any double-tap sequence
+      } else {
+        const curr: Tap = { time: e.timeStamp, point: this.canvasPoint(e) };
+        if (isDoubleTap(this.lastTap, curr)) {
+          this.lastTap = null;
+          this.doubleTapAt(curr.point);
+        } else {
+          this.lastTap = curr;
+        }
+      }
+    }
+
     this.mode = "idle";
     this.dragNodeId = null;
     this.dragLoopKey = null;
@@ -302,9 +327,16 @@ export class PointerInteraction {
   }
 
   private onDoubleClick(e: MouseEvent): void {
+    this.doubleTapAt(this.canvasPoint(e));
+  }
+
+  /** The double-click/double-tap action, shared by the native `dblclick` (mouse)
+   *  and the touch double-tap detector: rename the node under `p`, do nothing on
+   *  an edge, else create a node there. `p` is canvas-space. */
+  private doubleTapAt(p: Point): void {
     const scene = this.host.scene();
     if (!this.host.hasFolder() || !scene) return;
-    const world = this.host.camera.toWorld(this.canvasPoint(e).x, this.canvasPoint(e).y);
+    const world = this.host.camera.toWorld(p.x, p.y);
     const node = hitNode(scene.boxes, world);
     if (node) {
       this.host.startRename(node);
