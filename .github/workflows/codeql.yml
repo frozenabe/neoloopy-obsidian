@@ -1,0 +1,56 @@
+# CodeQL static analysis for the plugin's TypeScript/JavaScript source.
+#
+# Runs GitHub's code-scanning engine on every push and pull request to main,
+# plus a weekly scheduled scan so newly published CodeQL queries reach the
+# existing code without waiting for a commit. Results appear under the repo's
+# Security > Code scanning tab.
+#
+# This is an Obsidian plugin (pure TS/JS, bundled by esbuild), so CodeQL needs
+# no build — build-mode "none" extracts the source directly.
+#
+# Consistent with release.yml: third-party actions are pinned to a full commit
+# SHA for supply-chain integrity, with the human-readable tag in a trailing
+# comment. github/codeql-action/init and /analyze are subpaths of one repo and
+# share the same SHA (the commit the v3 tag points to).
+
+name: CodeQL
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "31 13 * * 1" # 13:31 UTC every Monday
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # upload the analysis results to code scanning
+      actions: read # read workflow run metadata
+      contents: read # check out the source
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # Default suite is security-focused, low-noise. Swap for
+          # "security-extended" or "security-and-quality" to widen coverage.
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        with:
+          category: "/language:${{ matrix.language }}"
