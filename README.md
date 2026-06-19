@@ -27,6 +27,12 @@ polarity-signed causal links, and the detected reinforcing (R) and balancing
   recentre on the linking variable.
 - **Export** to JSON, Markdown, or Mermaid.
 
+![Project-dynamics causal-loop diagram](screenshots/sample-model.png)
+
+<sub>A different domain — project dynamics (effort, schedule pressure, rework,
+burnout) — with the reinforcing and balancing loops detected and labelled
+(R1/R2/B1…) and the structure surfaced in the side panel.</sub>
+
 ## Install
 
 From Obsidian: **Settings → Community plugins → Browse → "neoloopy"**, then
@@ -34,7 +40,7 @@ Enable. (During review/manual install, copy `main.js`, `manifest.json`, and
 `styles.css` into `<vault>/.obsidian/plugins/neoloopy/`.)
 
 Open the canvas from the ribbon (the fork icon) or the command **"neoloopy: Open
-neoloopy canvas"**, then create a model and start adding variables.
+canvas"**, then create a model and start adding variables.
 
 ## Privacy — fully local, offline
 
@@ -58,6 +64,7 @@ readable TypeScript — no bundled binaries, no obfuscation, no network calls.
 npm install
 npm run dev        # esbuild watch → main.js
 npm run build      # typecheck + production bundle
+npm run lint       # eslint + eslint-plugin-obsidianmd (mirrors the store validator)
 npm test           # vitest (engine, codec, loop detection, geometry, Dart parity)
 ```
 

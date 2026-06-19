@@ -1,14 +1,14 @@
 # Screenshots
 
-The Obsidian store listing should show the **actual plugin canvas** running in
-Obsidian. Capturing that requires a GUI session, so it is the one remaining
-listing asset that must be produced by a human:
+Real captures of the plugin canvas running inside Obsidian, used in the repo
+`README.md` and the community-store listing.
 
-1. Open `~/Documents/neoloopy-obsidian-test` as a vault in Obsidian.
-2. Click the fork ribbon → the "Coffee & Burnout" model renders (R1 + B1 loops).
-3. Capture a screenshot of the canvas and save it here as `canvas.png`.
-4. Reference it near the top of the repo `README.md`.
+- `example-model.png` — an SIR epidemic model (with the link-editing toolbar
+  open); the hero image at the top of `README.md`.
+- `sample-model.png` — a project-dynamics model (effort, schedule pressure,
+  rework, burnout) showing detected reinforcing/balancing loops and the insight
+  panel.
 
-`example-model.svg` is a **provisional** vector preview of the same demo model,
-rendered by the Dart app's exporter — **not** the plugin canvas. Use it only as a
-placeholder until `canvas.png` exists.
+Both are genuine GUI captures. When updating them, re-shoot from a live Obsidian
+session (the canvas can't be rendered headlessly) and keep the `README.md`
+captions in sync.
