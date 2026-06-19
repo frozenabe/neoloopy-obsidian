@@ -550,11 +550,25 @@ export class CanvasView extends ItemView {
 
   private async createNodeAt(world: Point): Promise<void> {
     if (!this.folder) return;
-    const v = await this.model.addVariable(this.folder, { label: "", x: world.x, y: world.y });
+    // Open + focus the rename box NOW, synchronously within the pointer gesture,
+    // so iOS raises the soft keyboard. Focusing it after the awaits below (what a
+    // plain startRename call would do) forfeits the user-gesture token on iOS
+    // WebKit: the node gets created but its name box stays un-keyboarded, so a
+    // new node can't be named by touch. The box is rebound to the node's id once
+    // the write settles.
+    const input = this.openRenameInput("", this.camera.toScreen(world.x, world.y));
+    const v = await this.model
+      .addVariable(this.folder, { label: "", x: world.x, y: world.y })
+      .catch((e) => {
+        // Persist failed — don't strand the pre-opened input.
+        if (this.renameInput === input) this.renameInput = null;
+        input.remove();
+        throw e;
+      });
     await this.reloadGraph();
     this.select(v.id, null, null);
     this.render();
-    this.startRename(v.id);
+    this.bindRenameInput(input, v.id, "");
   }
 
   private async setNodeType(id: string, type: "stock" | "flow" | "auxiliary"): Promise<void> {
@@ -724,22 +738,43 @@ export class CanvasView extends ItemView {
     const box = this.scene.boxes.get(id);
     const node = this.graph?.nodes.find((n) => n.id === id);
     if (!box || !node) return;
+    const input = this.openRenameInput(node.label, this.camera.toScreen(box.cx, box.cy));
+    this.bindRenameInput(input, id, node.label);
+  }
+
+  /** Create, position, and focus the rename input, returned unbound. Split from
+   *  the id-binding so `createNodeAt` can open + focus the box *synchronously
+   *  inside the pointer gesture*: iOS only raises the soft keyboard for a focus()
+   *  during a user gesture, which the awaits in createNodeAt would otherwise
+   *  forfeit. `screen` is the canvas-space target (node box center). */
+  private openRenameInput(label: string, screen: { x: number; y: number }): HTMLInputElement {
     this.commitRename();
-    const screen = this.camera.toScreen(box.cx, box.cy);
     const input = this.wrapper.createEl("input", { type: "text", cls: "neoloopy-rename-input" });
-    input.value = node.label;
+    input.value = label;
     // Position is the only genuinely dynamic style (follows the node on screen).
     input.style.setProperty("--nl-rename-left", `${screen.x - 70}px`);
     input.style.setProperty("--nl-rename-top", `${screen.y - 14}px`);
     this.renameInput = input;
     input.focus();
     input.select();
+    return input;
+  }
 
+  /** Wire an open rename input to commit against `id` (Enter/blur save, Escape
+   *  cancels), repositioning it to the node's settled box — a freshly-created
+   *  node's input was placed at the raw tap point before the node existed. */
+  private bindRenameInput(input: HTMLInputElement, id: string, prevLabel: string): void {
+    const box = this.scene?.boxes.get(id);
+    if (box) {
+      const screen = this.camera.toScreen(box.cx, box.cy);
+      input.style.setProperty("--nl-rename-left", `${screen.x - 70}px`);
+      input.style.setProperty("--nl-rename-top", `${screen.y - 14}px`);
+    }
     const finish = (commit: boolean) => {
       const value = input.value.trim();
       this.renameInput = null;
       input.remove();
-      void this.endRename(id, commit ? value : null, node.label);
+      void this.endRename(id, commit ? value : null, prevLabel);
     };
     input.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter") {

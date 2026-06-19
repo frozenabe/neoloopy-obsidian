@@ -374,6 +374,22 @@ async function main() {
   view.toggleInsightPanel();
   check("toggling reopens the panel", panel.classList.contains("is-open"));
 
+  // ---- iOS edit affordance: a new node's rename box opens IN the gesture -----
+  // iOS WebKit only raises the soft keyboard when focus() runs synchronously
+  // inside the pointer gesture, so createNodeAt must open + focus the rename
+  // input BEFORE its first await (the vault write), not after. Assert the input
+  // exists synchronously, before the returned promise resolves.
+  const renameCount = () => findByClass(view.wrapper, "neoloopy-rename-input").length;
+  const beforeCreate = renameCount();
+  const createP = view.createNodeAt({ x: 100, y: 100 });
+  check(
+    "new-node rename input opens synchronously (iOS keyboard in-gesture)",
+    renameCount() === beforeCreate + 1,
+    `before=${beforeCreate} after=${renameCount()}`,
+  );
+  await createP;
+  check("new-node rename input survives the write settling", renameCount() >= 1, String(renameCount()));
+
   try { await view.onClose(); check("view.onClose() ran without throwing", true); }
   catch (e) { check("view.onClose() ran without throwing", false, e.message); }
 
