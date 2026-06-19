@@ -55,7 +55,7 @@ import {
   serializeLoopNote,
 } from "./loopNote";
 import { contentSignature, stampMeta, WRITE_SOURCE_PLUGIN } from "./specHash";
-import { loopKey } from "./loopKey";
+import { loopEchoLabel, loopKey } from "./loopKey";
 import { autoLayout } from "./layout";
 import {
   ExportEdge,
@@ -820,7 +820,7 @@ export class NativeEngine implements NeoloopyEngine {
         members,
         title: titles[key] ?? "",
         valence: valence[key] ?? "",
-        loopEcho: key,
+        loopEcho: loopEchoLabel(labels, type),
         body: notes[key] ?? "",
         extra: arch.length > 0 ? { archetype: arch } : {},
         malformed: false,
@@ -897,7 +897,7 @@ export class NativeEngine implements NeoloopyEngine {
       members,
       title: fields.title ?? existing.title,
       valence: fields.valence ?? existing.valence,
-      loopEcho: loopKey(memberLabels, type),
+      loopEcho: loopEchoLabel(memberLabels, type),
       body: fields.note ?? existing.body,
       extra,
       malformed: false,

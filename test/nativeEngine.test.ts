@@ -414,7 +414,7 @@ describe("NativeEngine — loop notes as Loops/*.md files", () => {
     expect(matched.body).toBe("reinforcing");
 
     const orphan = parsed.find((n) => n.members.length === 0)!;
-    expect(orphan.loopEcho).toBe("R:ghost|gone");
+    expect(orphan.loopEcho).toBe("R · ghost | gone");
     expect(orphan.body).toBe("orphaned annotation");
 
     // Idempotent: a second read does not duplicate or re-migrate.
