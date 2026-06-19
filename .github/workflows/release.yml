@@ -56,8 +56,28 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag" \
-            --title="$tag" \
-            --draft \
-            --generate-notes \
-            main.js manifest.json styles.css
+          # Pull this version's hand-written section out of CHANGELOG.md (the
+          # lines between "## [<tag>]" and the next "## [" heading) so the
+          # release body leads with the curated notes; --generate-notes then
+          # appends GitHub's auto "What's Changed" / Full Changelog section.
+          awk -v ver="$tag" '
+            $0 ~ "^## \\[" ver "\\]" { flag = 1; next }
+            flag && /^## \[/ { exit }
+            flag && /^\[[^][]*\]:/ { exit }
+            flag { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ -s release-notes.md ]; then
+            gh release create "$tag" \
+              --title="$tag" \
+              --draft \
+              --notes-file release-notes.md \
+              --generate-notes \
+              main.js manifest.json styles.css
+          else
+            echo "::warning::No CHANGELOG.md section for $tag; using generated notes only."
+            gh release create "$tag" \
+              --title="$tag" \
+              --draft \
+              --generate-notes \
+              main.js manifest.json styles.css
+          fi
