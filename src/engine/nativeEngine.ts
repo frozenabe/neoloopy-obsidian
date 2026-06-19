@@ -922,6 +922,10 @@ function slug(s: string): string {
 
 function randomHex(bytes: number): string {
   const arr = new Uint8Array(bytes);
+  // This engine is pure TypeScript and runs under vitest in plain Node as well
+  // as in Obsidian, so `globalThis.crypto` (not `window`) is the correct
+  // cross-environment accessor — `window` is undefined under Node.
+  // eslint-disable-next-line obsidianmd/no-global-this
   const g = (globalThis as { crypto?: Crypto }).crypto;
   if (g && typeof g.getRandomValues === "function") {
     g.getRandomValues(arr);

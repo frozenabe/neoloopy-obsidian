@@ -37,13 +37,13 @@ export default class NeoloopyPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "neoloopy-open-canvas",
-      name: "Open neoloopy canvas",
+      id: "open-canvas",
+      name: "Open canvas",
       callback: () => void this.openCanvas(),
     });
 
     this.addCommand({
-      id: "neoloopy-new-model",
+      id: "new-model",
       name: "Create new model",
       callback: () => void this.newModelCommand(),
     });
@@ -66,12 +66,12 @@ export default class NeoloopyPlugin extends Plugin {
       });
     };
 
-    onCanvas("neoloopy-add-variable", "Add variable", (v) => void v.cmdAddVariable());
-    onCanvas("neoloopy-tidy-layout", "Tidy layout", (v) => void v.cmdTidy());
-    onCanvas("neoloopy-detect-loops", "Detect feedback loops", (v) => v.reportLoops());
-    onCanvas("neoloopy-export-markdown", "Export model as Markdown", (v) => void v.cmdExport("markdown"));
-    onCanvas("neoloopy-export-json", "Export model as JSON", (v) => void v.cmdExport("json"));
-    onCanvas("neoloopy-export-mermaid", "Export model as Mermaid", (v) => void v.cmdExport("mermaid"));
+    onCanvas("add-variable", "Add variable", (v) => void v.cmdAddVariable());
+    onCanvas("tidy-layout", "Tidy layout", (v) => void v.cmdTidy());
+    onCanvas("detect-loops", "Detect feedback loops", (v) => v.reportLoops());
+    onCanvas("export-markdown", "Export model as Markdown", (v) => void v.cmdExport("markdown"));
+    onCanvas("export-json", "Export model as JSON", (v) => void v.cmdExport("json"));
+    onCanvas("export-mermaid", "Export model as Mermaid", (v) => void v.cmdExport("mermaid"));
   }
 
   /** The CanvasView in the active leaf, if any. */
@@ -93,18 +93,19 @@ export default class NeoloopyPlugin extends Plugin {
       leaf = workspace.getLeaf(true);
       await leaf.setViewState({ type: VIEW_TYPE_CANVAS, active: true });
     }
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
   }
 
   /** Rebuild the engine after a settings change (e.g. the default model folder). */
   rebuildEngine(): void {
-    const storage = new ObsidianStorage(this.app.vault);
+    const storage = new ObsidianStorage(this.app.vault, this.app.fileManager);
     const modelsRoot = (this.settings.defaultModelFolder ?? "").trim();
     this.engine = new NativeEngine(storage, parseYaml, { modelsRoot });
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const stored = (await this.loadData()) as Partial<NeoloopySettings> | null;
+    this.settings = { ...DEFAULT_SETTINGS, ...(stored ?? {}) };
   }
 
   async saveSettings(): Promise<void> {

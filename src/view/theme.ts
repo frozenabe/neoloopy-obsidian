@@ -74,8 +74,8 @@ export const DARK: Theme = {
 /** Pick the token set matching the document's current theme. */
 export function resolveTheme(): Theme {
   const dark =
-    typeof document !== "undefined" &&
-    document.body.classList.contains("theme-dark");
+    typeof activeDocument !== "undefined" &&
+    activeDocument.body.classList.contains("theme-dark");
   return dark ? DARK : LIGHT;
 }
 

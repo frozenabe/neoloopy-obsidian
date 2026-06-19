@@ -124,7 +124,7 @@ export function parseNote(source: string, yaml: YamlParse, fallbackId?: string):
 
   return {
     id: String(m["id"] ?? fallbackId ?? ""),
-    type: varTypeFrom(typeof m["type"] === "string" ? (m["type"] as string) : undefined),
+    type: varTypeFrom(typeof m["type"] === "string" ? (m["type"]) : undefined),
     label: String(m["label"] ?? ""),
     group: nonEmpty(m["group"]),
     claLayer: nonEmpty(m["claLayer"]),
@@ -136,7 +136,7 @@ export function parseNote(source: string, yaml: YamlParse, fallbackId?: string):
     status: nonEmpty(m["status"]),
     created: tsField(frontmatter, "created", m["created"]),
     modified: tsField(frontmatter, "modified", m["modified"]),
-    rev: typeof m["rev"] === "number" ? Math.trunc(m["rev"] as number) : 0,
+    rev: typeof m["rev"] === "number" ? Math.trunc(m["rev"]) : 0,
     source: nonEmpty(m["source"]),
     reviewed: tsField(frontmatter, "reviewed", m["reviewed"]),
     reviewedBy: nonEmpty(m["reviewedBy"]),

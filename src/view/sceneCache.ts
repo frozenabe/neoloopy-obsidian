@@ -36,8 +36,8 @@ export type LabelMeasurer = (label: string) => number;
  */
 export function canvasLabelMeasurer(): LabelMeasurer {
   const ctx =
-    typeof document !== "undefined"
-      ? document.createElement("canvas").getContext("2d")
+    typeof activeDocument !== "undefined"
+      ? activeDocument.createElement("canvas").getContext("2d")
       : null;
   if (!ctx) return (label) => label.length * 7.2;
   return (label) => {

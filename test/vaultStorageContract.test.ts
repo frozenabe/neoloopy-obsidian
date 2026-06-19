@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { normalizePath, TFile, TFolder } from "obsidian";
-import type { Vault, TAbstractFile } from "obsidian";
+import type { Vault, TAbstractFile, FileManager } from "obsidian";
 import { MemoryStorage, type VaultStorage } from "../src/engine/storage";
 import { ObsidianStorage } from "../src/engine/obsidianStorage";
 
@@ -50,6 +50,12 @@ class FakeVault {
     }
   }
 
+  // ObsidianStorage routes deletions through FileManager.trashFile; the fake
+  // honours the user's trash preference by simply removing the entry.
+  async trashFile(file: TAbstractFile): Promise<void> {
+    await this.delete(file);
+  }
+
   async createFolder(path: string): Promise<TFolder> {
     const p = normalizePath(path);
     if (this.folders.has(p) || this.files.has(p)) throw new Error(`EEXIST: ${p}`);
@@ -93,7 +99,16 @@ function isImmediateChild(prefix: string, path: string): boolean {
 
 const backends: Array<[string, () => VaultStorage]> = [
   ["MemoryStorage", () => new MemoryStorage()],
-  ["ObsidianStorage", () => new ObsidianStorage(new FakeVault() as unknown as Vault)],
+  [
+    "ObsidianStorage",
+    () => {
+      const fv = new FakeVault();
+      return new ObsidianStorage(
+        fv as unknown as Vault,
+        fv as unknown as FileManager,
+      );
+    },
+  ],
 ];
 
 describe.each(backends)("VaultStorage contract: %s", (_name, make) => {

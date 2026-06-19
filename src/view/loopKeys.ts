@@ -6,7 +6,7 @@
  * to the shared `loopKey` so the view and engine never drift.
  */
 
-import { DetectedLoop, LoopType } from "../engine/types";
+import { LoopType } from "../engine/types";
 import { loopKey } from "../engine/loopKey";
 
 /** A loop's resolvable shape — just what key derivation needs. */

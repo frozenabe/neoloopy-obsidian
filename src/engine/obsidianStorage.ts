@@ -7,11 +7,14 @@
  */
 
 import { TFile, TFolder, normalizePath } from "obsidian";
-import type { Vault } from "obsidian";
+import type { Vault, FileManager } from "obsidian";
 import { DirListing, VaultStorage, parentPath } from "./storage";
 
 export class ObsidianStorage implements VaultStorage {
-  constructor(private readonly vault: Vault) {}
+  constructor(
+    private readonly vault: Vault,
+    private readonly fileManager: FileManager,
+  ) {}
 
   async exists(path: string): Promise<boolean> {
     return this.vault.getAbstractFileByPath(normalizePath(path)) != null;
@@ -37,7 +40,7 @@ export class ObsidianStorage implements VaultStorage {
 
   async remove(path: string): Promise<void> {
     const f = this.vault.getAbstractFileByPath(normalizePath(path));
-    if (f) await this.vault.delete(f);
+    if (f) await this.fileManager.trashFile(f);
   }
 
   async mkdirs(path: string): Promise<void> {
@@ -62,7 +65,7 @@ export class ObsidianStorage implements VaultStorage {
 
   async rmdir(path: string): Promise<void> {
     const f = this.vault.getAbstractFileByPath(normalizePath(path));
-    if (f instanceof TFolder) await this.vault.delete(f, true);
+    if (f instanceof TFolder) await this.fileManager.trashFile(f);
   }
 
   async list(path: string): Promise<DirListing> {

@@ -29,7 +29,7 @@ import { loopNoteKey } from "./loopKeys";
 import { InsightPanel } from "./insightPanel";
 import { CanvasToolbar } from "./canvasToolbar";
 import { SelectionChrome } from "./selectionChrome";
-import { EquationModal, ShortcutsModal } from "./dialogs";
+import { EquationModal } from "./dialogs";
 import { LoopHighlight, Scene, paint } from "./painter";
 import { Theme, resolveTheme } from "./theme";
 import { SceneCache } from "./sceneCache";
@@ -404,7 +404,7 @@ export class CanvasView extends ItemView {
       return;
     }
     const c = this.camera.toWorld(this.canvas.clientWidth / 2, this.canvas.clientHeight / 2);
-    const v = await this.model.addVariable(this.folder as string, { label: "", x: c.x, y: c.y });
+    const v = await this.model.addVariable(this.folder, { label: "", x: c.x, y: c.y });
     await this.reloadGraph();
     this.selNode = v.id;
     this.selEdge = this.selLoop = null;
@@ -414,7 +414,7 @@ export class CanvasView extends ItemView {
 
   private async tidy(): Promise<void> {
     if (!this.folder) return;
-    await this.model.relayout(this.folder as string);
+    await this.model.relayout(this.folder);
     await this.reloadGraph();
     this.fittedOnce = false;
     this.fitIfNeeded();
@@ -550,7 +550,7 @@ export class CanvasView extends ItemView {
 
   private async createNodeAt(world: Point): Promise<void> {
     if (!this.folder) return;
-    const v = await this.model.addVariable(this.folder as string, { label: "", x: world.x, y: world.y });
+    const v = await this.model.addVariable(this.folder, { label: "", x: world.x, y: world.y });
     await this.reloadGraph();
     this.select(v.id, null, null);
     this.render();
@@ -559,7 +559,7 @@ export class CanvasView extends ItemView {
 
   private async setNodeType(id: string, type: "stock" | "flow" | "auxiliary"): Promise<void> {
     if (!this.folder) return;
-    await this.model.updateVariable(this.folder as string, id, { type });
+    await this.model.updateVariable(this.folder, id, { type });
     await this.reloadGraph();
     this.render();
   }
@@ -567,7 +567,7 @@ export class CanvasView extends ItemView {
   /** Assign (or clear, with null) a node's curated group color. */
   private async setNodeGroup(id: string, group: string | null): Promise<void> {
     if (!this.folder) return;
-    await this.model.updateVariable(this.folder as string, id, { group });
+    await this.model.updateVariable(this.folder, id, { group });
     await this.reloadGraph();
     this.render();
   }
@@ -586,7 +586,7 @@ export class CanvasView extends ItemView {
   /** Write a variable's quant definition, then refresh the canvas. */
   private async setEquation(id: string, patch: QuantPatch): Promise<void> {
     if (!this.folder) return;
-    await this.model.setEquation(this.folder as string, id, patch);
+    await this.model.setEquation(this.folder, id, patch);
     await this.reloadGraph();
     this.render();
   }
@@ -627,7 +627,7 @@ export class CanvasView extends ItemView {
     child: { folder: string; name: string } | null,
   ): Promise<void> {
     if (!this.folder) return;
-    await this.model.setSubsystem(this.folder as string, id, child);
+    await this.model.setSubsystem(this.folder, id, child);
     await this.reloadGraph();
     this.render();
   }
@@ -657,7 +657,7 @@ export class CanvasView extends ItemView {
     },
   ): Promise<void> {
     if (!this.folder) return;
-    await this.model.updateLink(this.folder as string, g.source, g.target, patch);
+    await this.model.updateLink(this.folder, g.source, g.target, patch);
     await this.reloadGraph();
     this.render();
   }
@@ -666,25 +666,25 @@ export class CanvasView extends ItemView {
    *  move is already applied to the in-memory graph + scene). */
   private async persistNodePosition(id: string, x: number, y: number): Promise<void> {
     if (!this.folder) return;
-    await this.model.moveVariable(this.folder as string, id, x, y);
+    await this.model.moveVariable(this.folder, id, x, y);
   }
 
   /** Create a positive link A→B and reload; the caller selects the target. */
   private async createLink(from: string, to: string): Promise<void> {
     if (!this.folder) return;
-    await this.model.addLink(this.folder as string, from, to, { polarity: "+" });
+    await this.model.addLink(this.folder, from, to, { polarity: "+" });
     await this.reloadGraph();
   }
 
   /** Persist an edge's dragged curvature (already applied to the in-memory link). */
   private async commitBow(source: string, target: string, curvature: number | undefined): Promise<void> {
     if (!this.folder) return;
-    await this.model.updateLink(this.folder as string, source, target, { curvature });
+    await this.model.updateLink(this.folder, source, target, { curvature });
   }
 
   private async deleteNode(id: string): Promise<void> {
     if (!this.folder) return;
-    await this.model.removeVariable(this.folder as string, id);
+    await this.model.removeVariable(this.folder, id);
     if (this.selNode === id) this.selNode = null;
     await this.reloadGraph();
     this.render();
@@ -692,7 +692,7 @@ export class CanvasView extends ItemView {
 
   private async deleteEdge(from: string, to: string): Promise<void> {
     if (!this.folder) return;
-    await this.model.removeLink(this.folder as string, from, to);
+    await this.model.removeLink(this.folder, from, to);
     this.selEdge = null;
     await this.reloadGraph();
     this.render();
@@ -702,14 +702,14 @@ export class CanvasView extends ItemView {
     if (!this.folder) return;
     if (this.selNode) {
       const id = this.selNode;
-      await this.model.removeVariable(this.folder as string, id);
+      await this.model.removeVariable(this.folder, id);
       this.selNode = null;
       await this.reloadGraph();
       this.render();
     } else if (this.selEdge && this.scene) {
       const g = this.scene.edges.find((x) => x.id === this.selEdge);
       if (g) {
-        await this.model.removeLink(this.folder as string, g.source, g.target);
+        await this.model.removeLink(this.folder, g.source, g.target);
         this.selEdge = null;
         await this.reloadGraph();
         this.render();
@@ -765,7 +765,7 @@ export class CanvasView extends ItemView {
     if (value === null) {
       // Cancelled — discard a freshly-created empty variable.
       if (prevLabel.length === 0) {
-        await this.model.removeVariable(this.folder as string, id);
+        await this.model.removeVariable(this.folder, id);
         this.selNode = null;
         await this.reloadGraph();
       }
@@ -773,10 +773,10 @@ export class CanvasView extends ItemView {
       return;
     }
     if (value.length === 0 && prevLabel.length === 0) {
-      await this.model.removeVariable(this.folder as string, id);
+      await this.model.removeVariable(this.folder, id);
       this.selNode = null;
     } else if (value !== prevLabel) {
-      await this.model.updateVariable(this.folder as string, id, { label: value });
+      await this.model.updateVariable(this.folder, id, { label: value });
     }
     await this.reloadGraph();
     this.render();

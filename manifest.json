@@ -2,7 +2,7 @@
   "id": "neoloopy",
   "name": "neoloopy",
   "version": "0.1.0",
-  "minAppVersion": "1.4.0",
+  "minAppVersion": "1.7.2",
   "description": "Systems-thinking causal-loop diagrams (CLDs): build variables and causal links, detect reinforcing/balancing feedback loops, and annotate them — fully local and offline.",
   "author": "neoloopy",
   "authorUrl": "https://neoloopy.com",

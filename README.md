@@ -9,8 +9,9 @@ your model — all stored as plain files you own.
 
 ![Example causal-loop diagram](screenshots/example-model.png)
 
-<sub>Diagram preview of a model (reinforcing + balancing loops). A screenshot of
-the live in-Obsidian canvas will replace this for the store listing.</sub>
+<sub>A neoloopy model on the in-Obsidian canvas — variables as notes,
+polarity-signed causal links, and the detected reinforcing (R) and balancing
+(B) feedback loops.</sub>
 
 - **Local-first and offline.** Each model is a folder of Markdown notes plus a
   small `model.json` manifest. No account, no server, nothing leaves your

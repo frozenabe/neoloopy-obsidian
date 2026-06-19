@@ -67,8 +67,8 @@ export function linkFromMap(m: Record<string, unknown>): VaultLink {
     delay: m["delay"] === true,
     indirect: m["indirect"] === true,
     nonlinear: m["nonlinear"] === true,
-    weight: typeof m["weight"] === "number" ? Math.trunc(m["weight"] as number) : undefined,
-    curvature: typeof m["curvature"] === "number" ? (m["curvature"] as number) : undefined,
+    weight: typeof m["weight"] === "number" ? Math.trunc(m["weight"]) : undefined,
+    curvature: typeof m["curvature"] === "number" ? (m["curvature"]) : undefined,
     confidence: normalizeConfidence(m["confidence"]),
     basis: normalizeBasis(m["basis"]),
   };
@@ -182,16 +182,16 @@ export function toUtcIso(v: unknown): string | undefined {
 
 export function manifestFromJson(j: Record<string, unknown>): ModelManifest {
   const ts = (v: unknown): string => toUtcIso(v) ?? new Date().toISOString();
-  const f = typeof j["folder"] === "string" ? (j["folder"] as string).trim() : undefined;
+  const f = typeof j["folder"] === "string" ? (j["folder"]).trim() : undefined;
   return {
     id: String(j["id"]),
     name: String(j["name"] ?? "Untitled"),
-    schemaVersion: typeof j["schemaVersion"] === "number" ? Math.trunc(j["schemaVersion"] as number) : 1,
+    schemaVersion: typeof j["schemaVersion"] === "number" ? Math.trunc(j["schemaVersion"]) : 1,
     viewport: viewportFromMap(j["viewport"] as Record<string, unknown> | undefined),
     created: ts(j["created"]),
     modified: ts(j["modified"]),
     folder: f && f.length > 0 ? f : undefined,
-    order: typeof j["order"] === "number" ? Math.trunc(j["order"] as number) : 0,
+    order: typeof j["order"] === "number" ? Math.trunc(j["order"]) : 0,
     extra: Object.fromEntries(Object.entries(j).filter(([k]) => !MANIFEST_KNOWN.has(k))),
   };
 }

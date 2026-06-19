@@ -38,9 +38,9 @@ export class SelectionAnimator {
       this.pulse = (t % 2400) / 2400;
       this.flow = (t % 900) / 900;
       this.render();
-      this.anim = requestAnimationFrame(tick);
+      this.anim = window.requestAnimationFrame(tick);
     };
-    this.anim = requestAnimationFrame(tick);
+    this.anim = window.requestAnimationFrame(tick);
   }
 
   /** Stop the loop and reset the phases (also used on view close). */

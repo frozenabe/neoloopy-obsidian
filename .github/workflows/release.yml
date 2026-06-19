@@ -10,7 +10,11 @@
 # The release is created as a DRAFT — review it, then publish it so the
 # obsidian-releases bot can see the assets. The tag MUST equal manifest.json's
 # version exactly (no leading "v") — a human responsibility; this workflow does
-# not guard it. Tag with `git tag <version> && git push origin <version>`.
+# not guard it. See STORE-SUBMISSION.md.
+#
+# Each asset gets a signed GitHub build-provenance attestation, so anyone can
+# cryptographically verify it was built from this source by this workflow:
+#   gh attest verify --repo frozenabe/neoloopy-obsidian main.js
 
 name: Release Obsidian plugin
 
@@ -23,7 +27,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # create the release and upload assets
+      id-token: write # mint the OIDC token used to sign the attestation
+      attestations: write # record the build-provenance attestation
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -37,6 +43,14 @@ jobs:
           npm ci
           npm run build
 
+      - name: Attest build provenance for the release assets
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,4 +59,5 @@ jobs:
           gh release create "$tag" \
             --title="$tag" \
             --draft \
+            --generate-notes \
             main.js manifest.json styles.css
