@@ -135,6 +135,13 @@ export interface NeoloopyEngine {
    * without re-slugging or moving the directory. Rejects a blank title.
    */
   retitleModel(folder: string, name: string): Promise<ModelRef>;
+  /**
+   * The node-level inverse of retitleModel: after the user renames a variable
+   * note in the vault (`Nodes/<stem>.md`), set its label to the de-slugged
+   * stem. The stable `var_…` id and inbound links are untouched. No-op when the
+   * file is gone or the label already matches.
+   */
+  relabelNodeFromFilename(folder: string, fileStem: string): Promise<void>;
   deleteModel(folder: string): Promise<void>;
   loadGraph(folder: string): Promise<GraphView>;
 

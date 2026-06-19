@@ -45,6 +45,7 @@ import {
 } from "./types";
 import { LoopGraph, labelLoopsByKey } from "./loopGraph";
 import { YamlParse, parseNote, serializeNote } from "./noteCodec";
+import { noteSlug, noteUnslug } from "./noteNaming";
 import {
   LoopNote,
   canonicalLoopMembers,
@@ -220,6 +221,28 @@ export class NativeEngine implements NeoloopyEngine {
     };
   }
 
+  /**
+   * Sync a node's label to its filename after the user renamed the file in the
+   * vault (`Nodes/<stem>.md`). The node-level inverse of {@link retitleModel}:
+   * the file is already where the user put it, so the label follows it (the
+   * de-slugged stem, underscores → spaces). {@link writeNote} may then
+   * re-normalize the on-disk name (spaces → underscores) so it converges. The
+   * stable `var_…` id and every link to it are untouched, so links never break.
+   */
+  async relabelNodeFromFilename(folder: string, fileStem: string): Promise<void> {
+    let prev: VariableFile;
+    try {
+      const raw = await this.storage.read(this.notePath(folder, fileStem));
+      prev = parseNote(raw, this.yaml, fileStem);
+    } catch {
+      return; // file vanished or unreadable between rename and handler — nothing to sync
+    }
+    const label = noteUnslug(fileStem);
+    if (label.length === 0 || label === prev.label) return;
+    await this.writeNote(folder, prev, { ...prev, label });
+    await this.touchManifest(folder);
+  }
+
   /** Target folder for renaming `folder`'s model to `name`: the new slug under
    *  the same parent, suffixed on collision; unchanged when the slug matches. */
   private async destForRename(folder: string, name: string): Promise<string> {
@@ -336,9 +359,13 @@ export class NativeEngine implements NeoloopyEngine {
   }
 
   async removeVariable(folder: string, id: string): Promise<void> {
-    // Remove the canonical `Nodes/` note and any leftover legacy flat copy.
-    await this.storage.remove(this.notePath(folder, id));
-    await this.storage.remove(this.legacyNotePath(folder, id));
+    // The note is named by its label now, so resolve its real path by id; also
+    // clear any stale id-named copies (a legacy flat note or an old Nodes/<id>.md).
+    const resolved = (await this.noteFilesById(folder)).get(id);
+    if (resolved) await this.storage.remove(resolved);
+    for (const p of [this.notePath(folder, id), this.legacyNotePath(folder, id)]) {
+      if (p !== resolved) await this.storage.remove(p);
+    }
     // Drop inbound links so loop detection and the manifest stay consistent.
     const notes = await this.loadNotes(folder);
     for (const n of notes) {
@@ -548,22 +575,20 @@ export class NativeEngine implements NeoloopyEngine {
     return joinPath(folder, "Nodes");
   }
 
-  /** Canonical write target for a variable note: `<folder>/Nodes/<id>.md`. */
-  private notePath(folder: string, id: string): string {
-    return joinPath(this.nodesDir(folder), `${id}.md`);
+  /** A variable note's path for a filename stem: `<folder>/Nodes/<stem>.md`. */
+  private notePath(folder: string, stem: string): string {
+    return joinPath(this.nodesDir(folder), `${stem}.md`);
   }
 
   /** Pre-`Nodes/` location of a variable note, flat at the model root. */
-  private legacyNotePath(folder: string, id: string): string {
-    return joinPath(folder, `${id}.md`);
+  private legacyNotePath(folder: string, stem: string): string {
+    return joinPath(folder, `${stem}.md`);
   }
 
   private async readNote(folder: string, id: string): Promise<VariableFile> {
-    // Prefer the canonical `Nodes/` note; fall back to a legacy flat note.
-    const canonical = this.notePath(folder, id);
-    const path = (await this.storage.exists(canonical))
-      ? canonical
-      : this.legacyNotePath(folder, id);
+    // The filename tracks the label, so resolve by frontmatter id. Fall back to
+    // the canonical id-named path for an id that isn't on disk yet.
+    const path = (await this.noteFilesById(folder)).get(id) ?? this.notePath(folder, id);
     return parseNote(await this.storage.read(path), this.yaml, id);
   }
 
@@ -573,11 +598,32 @@ export class NativeEngine implements NeoloopyEngine {
     next: VariableFile,
   ): Promise<VariableFile> {
     const stamped = stampMeta(prev, next, WRITE_SOURCE_PLUGIN);
-    await this.storage.write(this.notePath(folder, stamped.id), serializeNote(stamped));
-    // Sweep any legacy flat copy so the `Nodes/` note is the only one on disk
-    // (mirrors the Dart `ensureCanonical` sweep, lazily — per touched note).
+
+    // The file is named after the label (so the vault reads like the diagram);
+    // a label-less node falls back to its stable id. Dedupe against the names
+    // already taken by *other* notes, suffixing `-2/-3…` like model folders.
+    const byId = await this.noteFilesById(folder);
+    const currentPath = byId.get(stamped.id);
+    const desired = noteSlug(stamped.label) || stamped.id;
+    const taken = new Set<string>();
+    for (const [otherId, p] of byId) {
+      if (otherId !== stamped.id) taken.add(baseName(p).replace(/\.md$/, ""));
+    }
+    let stem = desired;
+    let n = 2;
+    while (taken.has(stem)) stem = `${desired}-${n++}`;
+    const target = this.notePath(folder, stem);
+
+    await this.storage.write(target, serializeNote(stamped));
+    // Migrate on write: drop the node's previous file if its name changed (an
+    // id-named or differently-labelled copy), plus any legacy flat copy.
+    if (currentPath && currentPath !== target) {
+      await this.storage.remove(currentPath);
+    }
     const legacy = this.legacyNotePath(folder, stamped.id);
-    if (await this.storage.exists(legacy)) await this.storage.remove(legacy);
+    if (legacy !== target && legacy !== currentPath && (await this.storage.exists(legacy))) {
+      await this.storage.remove(legacy);
+    }
     return stamped;
   }
 
@@ -619,18 +665,21 @@ export class NativeEngine implements NeoloopyEngine {
    */
   private async noteFilesById(folder: string): Promise<Map<string, string>> {
     const byId = new Map<string, string>();
-    const collect = (files: string[], excludeSpecial: boolean): void => {
+    const collect = async (files: string[], excludeSpecial: boolean): Promise<void> => {
       for (const f of files) {
         const b = baseName(f);
         if (!b.endsWith(".md")) continue;
         if (excludeSpecial && SPECIAL_NOTES.has(b)) continue;
-        byId.set(b.replace(/\.md$/, ""), f);
+        // The filename no longer is the id — read it from the frontmatter
+        // (falling back to the filename stem for a note that lacks one).
+        const id = parseNote(await this.storage.read(f), this.yaml, b.replace(/\.md$/, "")).id;
+        byId.set(id, f);
       }
     };
     // Legacy flat notes first, then let canonical `Nodes/` notes override.
-    collect((await this.storage.list(folder)).files, true);
+    await collect((await this.storage.list(folder)).files, true);
     try {
-      collect((await this.storage.list(this.nodesDir(folder))).files, false);
+      await collect((await this.storage.list(this.nodesDir(folder))).files, false);
     } catch {
       // No `Nodes/` subfolder — flat-only (legacy) layout.
     }
@@ -642,11 +691,28 @@ export class NativeEngine implements NeoloopyEngine {
   }
 
   private async loadNotes(folder: string): Promise<VariableFile[]> {
-    const notes: VariableFile[] = [];
-    for (const [id, path] of await this.noteFilesById(folder)) {
-      notes.push(parseNote(await this.storage.read(path), this.yaml, id));
+    const byId = new Map<string, VariableFile>();
+    const collect = async (
+      files: string[],
+      excludeSpecial: boolean,
+      canonical: boolean,
+    ): Promise<void> => {
+      for (const f of files) {
+        const b = baseName(f);
+        if (!b.endsWith(".md")) continue;
+        if (excludeSpecial && SPECIAL_NOTES.has(b)) continue;
+        const file = parseNote(await this.storage.read(f), this.yaml, b.replace(/\.md$/, ""));
+        // Canonical `Nodes/` notes override a legacy flat note with the same id.
+        if (canonical || !byId.has(file.id)) byId.set(file.id, file);
+      }
+    };
+    await collect((await this.storage.list(folder)).files, true, false);
+    try {
+      await collect((await this.storage.list(this.nodesDir(folder))).files, false, true);
+    } catch {
+      // No `Nodes/` subfolder — flat-only (legacy) layout.
     }
-    return notes;
+    return [...byId.values()];
   }
 
   // ---- loop-note file storage (the model's `Loops/` subfolder) -------------

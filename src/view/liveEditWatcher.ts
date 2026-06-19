@@ -44,6 +44,12 @@ export class LiveEditWatcher {
     this.selfWriteUntil = Date.now() + SELF_WRITE_MS;
   }
 
+  /** Whether we're inside the self-write window — a write the plugin itself made
+   *  (e.g. its own folder/file rename) that other vault handlers should ignore. */
+  inSelfWrite(): boolean {
+    return Date.now() < this.selfWriteUntil;
+  }
+
   /** Route a vault change in for consideration (registered by the view). */
   onVaultChange(file: TAbstractFile): void {
     const folder = this.host.folder();

@@ -82,10 +82,10 @@ describe("NativeEngine — model lifecycle", () => {
   it("carries the model's notes to the renamed folder", async () => {
     const { storage, engine } = makeEngine();
     const { folder } = await engine.createModel("Has Notes");
-    const v = await engine.addVariable(folder, { label: "Births" });
+    await engine.addVariable(folder, { label: "Births" });
 
     const renamed = await engine.renameModel(folder, "Renamed");
-    expect(await storage.exists(`models/renamed/Nodes/${v.id}.md`)).toBe(true);
+    expect(await storage.exists("models/renamed/Nodes/Births.md")).toBe(true);
     expect(await storage.exists("models/has-notes")).toBe(false);
 
     const view = await engine.loadGraph(renamed.folder);
@@ -153,7 +153,7 @@ describe("NativeEngine — variables and links", () => {
     const { folder } = await engine.createModel("M");
     const v = await engine.addVariable(folder, { label: "Births", type: "flow" });
     expect(v.id).toMatch(/^var_[0-9a-f]{8}$/);
-    expect(await storage.exists(`${folder}/Nodes/${v.id}.md`)).toBe(true);
+    expect(await storage.exists(`${folder}/Nodes/Births.md`)).toBe(true);
 
     const view = await engine.loadGraph(folder);
     expect(view.nodes).toHaveLength(1);
@@ -248,7 +248,7 @@ describe("NativeEngine — quant equation writes", () => {
     const { folder } = await engine.createModel("M");
     const v = await engine.addVariable(folder, { label: "Pop", type: "stock" });
     // Seed a richer quant block as the app/CLI might write it.
-    const path = `${folder}/Nodes/${v.id}.md`;
+    const path = `${folder}/Nodes/Pop.md`;
     const seeded = parseNote(await storage.read(path), yaml, v.id);
     seeded.extra.quant = { initial: "990", dimension: "age" };
     await storage.write(path, serializeNote(seeded));
@@ -457,46 +457,48 @@ describe("NativeEngine — discovery", () => {
 });
 
 describe("NativeEngine — Nodes/ layout & legacy migration", () => {
-  it("writes variable notes under Nodes/, not flat at the model root", async () => {
+  it("writes variable notes under Nodes/ (named by label), not flat at the model root", async () => {
     const { storage, engine } = makeEngine();
     const { folder } = await engine.createModel("M");
-    const v = await engine.addVariable(folder, { label: "Births", type: "flow" });
-    expect(await storage.exists(`${folder}/Nodes/${v.id}.md`)).toBe(true);
-    expect(await storage.exists(`${folder}/${v.id}.md`)).toBe(false);
+    await engine.addVariable(folder, { label: "Births", type: "flow" });
+    expect(await storage.exists(`${folder}/Nodes/Births.md`)).toBe(true);
+    expect(await storage.exists(`${folder}/Births.md`)).toBe(false);
     // The manifest still lives at the model root, not under Nodes/.
     expect(await storage.exists(`${folder}/model.json`)).toBe(true);
   });
 
-  /** Demote a Nodes/ note to the legacy flat location (a pre-Nodes vault). */
+  /** Demote a Nodes/<label>.md note to the legacy flat, id-named location
+   *  (a pre-Nodes vault, where files were named by id). */
   async function demoteToFlat(
     storage: MemoryStorage,
     folder: string,
+    stem: string,
     id: string,
   ): Promise<void> {
-    const body = await storage.read(`${folder}/Nodes/${id}.md`);
+    const body = await storage.read(`${folder}/Nodes/${stem}.md`);
     await storage.write(`${folder}/${id}.md`, body);
-    await storage.remove(`${folder}/Nodes/${id}.md`);
+    await storage.remove(`${folder}/Nodes/${stem}.md`);
   }
 
-  it("reads a legacy flat note when no Nodes/ copy exists", async () => {
+  it("reads a legacy flat (id-named) note when no Nodes/ copy exists", async () => {
     const { storage, engine } = makeEngine();
     const { folder } = await engine.createModel("M");
     const v = await engine.addVariable(folder, { label: "Pop" });
-    await demoteToFlat(storage, folder, v.id);
+    await demoteToFlat(storage, folder, "Pop", v.id);
 
     const view = await engine.loadGraph(folder);
     expect(view.nodes.map((n) => n.label)).toEqual(["Pop"]);
     expect((await engine.listModels())[0].variableCount).toBe(1);
   });
 
-  it("sweeps a legacy flat note into Nodes/ when it is next written", async () => {
+  it("sweeps a legacy flat note into Nodes/<label>.md when it is next written", async () => {
     const { storage, engine } = makeEngine();
     const { folder } = await engine.createModel("M");
     const v = await engine.addVariable(folder, { label: "Pop" });
-    await demoteToFlat(storage, folder, v.id);
+    await demoteToFlat(storage, folder, "Pop", v.id);
 
     await engine.updateVariable(folder, v.id, { label: "Population" });
-    expect(await storage.exists(`${folder}/Nodes/${v.id}.md`)).toBe(true);
+    expect(await storage.exists(`${folder}/Nodes/Population.md`)).toBe(true);
     expect(await storage.exists(`${folder}/${v.id}.md`)).toBe(false); // swept
     const view = await engine.loadGraph(folder);
     expect(view.nodes).toHaveLength(1); // not double-counted across both spots
@@ -508,7 +510,7 @@ describe("NativeEngine — Nodes/ layout & legacy migration", () => {
     const { folder } = await engine.createModel("M");
     const v = await engine.addVariable(folder, { label: "Fresh" }); // in Nodes/
     // Plant a stale flat copy at the root carrying the same id.
-    const stale = parseNote(await storage.read(`${folder}/Nodes/${v.id}.md`), yaml, v.id);
+    const stale = parseNote(await storage.read(`${folder}/Nodes/Fresh.md`), yaml, v.id);
     await storage.write(`${folder}/${v.id}.md`, serializeNote({ ...stale, label: "Stale" }));
 
     const view = await engine.loadGraph(folder);
@@ -517,15 +519,15 @@ describe("NativeEngine — Nodes/ layout & legacy migration", () => {
     expect((await engine.listModels())[0].variableCount).toBe(1);
   });
 
-  it("removeVariable deletes both the Nodes/ and any legacy flat copy", async () => {
+  it("removeVariable deletes both the Nodes/ note and any legacy flat copy", async () => {
     const { storage, engine } = makeEngine();
     const { folder } = await engine.createModel("M");
     const v = await engine.addVariable(folder, { label: "Gone" });
-    // A leftover flat copy alongside the canonical Nodes/ one.
-    await storage.write(`${folder}/${v.id}.md`, await storage.read(`${folder}/Nodes/${v.id}.md`));
+    // A leftover flat (id-named) copy alongside the canonical Nodes/<label> one.
+    await storage.write(`${folder}/${v.id}.md`, await storage.read(`${folder}/Nodes/Gone.md`));
 
     await engine.removeVariable(folder, v.id);
-    expect(await storage.exists(`${folder}/Nodes/${v.id}.md`)).toBe(false);
+    expect(await storage.exists(`${folder}/Nodes/Gone.md`)).toBe(false);
     expect(await storage.exists(`${folder}/${v.id}.md`)).toBe(false);
     expect((await engine.loadGraph(folder)).nodes).toHaveLength(0);
   });
@@ -582,5 +584,116 @@ describe("deriveParents", () => {
     const { engine } = makeEngine();
     const solo = await engine.createModel("Solo");
     expect(await engine.deriveParents(solo.folder)).toEqual([]);
+  });
+});
+
+describe("NativeEngine — node files named by label", () => {
+  it("names a variable note by its label slug, keeping the var id in frontmatter", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("M");
+    const v = await engine.addVariable(folder, { label: "Birth Rate" });
+
+    expect(v.id).toMatch(/^var_/);
+    expect(await storage.exists(`${folder}/Nodes/Birth_Rate.md`)).toBe(true);
+    expect(await storage.exists(`${folder}/Nodes/${v.id}.md`)).toBe(false);
+    // The stable id still lives in the file (links target it, not the filename).
+    const note = parseNote(await storage.read(`${folder}/Nodes/Birth_Rate.md`), yaml);
+    expect(note.id).toBe(v.id);
+    expect(note.label).toBe("Birth Rate");
+  });
+
+  it("falls back to the var id for a label-less variable's filename", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("M");
+    const v = await engine.addVariable(folder, { label: "" });
+    expect(await storage.exists(`${folder}/Nodes/${v.id}.md`)).toBe(true);
+  });
+
+  it("moves the file when the label changes and drops the old name", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("M");
+    const v = await engine.addVariable(folder, { label: "Births" });
+    expect(await storage.exists(`${folder}/Nodes/Births.md`)).toBe(true);
+
+    await engine.updateVariable(folder, v.id, { label: "Mortality" });
+    expect(await storage.exists(`${folder}/Nodes/Mortality.md`)).toBe(true);
+    expect(await storage.exists(`${folder}/Nodes/Births.md`)).toBe(false);
+
+    const view = await engine.loadGraph(folder);
+    expect(view.nodes.find((n) => n.id === v.id)?.label).toBe("Mortality");
+  });
+
+  it("dedupes node filenames with -2 when two labels collide", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("M");
+    const a = await engine.addVariable(folder, { label: "Flow" });
+    const b = await engine.addVariable(folder, { label: "Flow" });
+
+    expect(a.id).not.toBe(b.id);
+    expect(await storage.exists(`${folder}/Nodes/Flow.md`)).toBe(true);
+    expect(await storage.exists(`${folder}/Nodes/Flow-2.md`)).toBe(true);
+    const view = await engine.loadGraph(folder);
+    expect(view.nodes.filter((n) => n.label === "Flow")).toHaveLength(2);
+  });
+
+  it("keeps links intact across a label rename (links target the id, not the file)", async () => {
+    const { engine } = makeEngine();
+    const { folder } = await engine.createModel("M");
+    const a = await engine.addVariable(folder, { label: "A" });
+    const b = await engine.addVariable(folder, { label: "B" });
+    await engine.addLink(folder, a.id, b.id);
+
+    await engine.updateVariable(folder, b.id, { label: "Renamed B" });
+
+    const view = await engine.loadGraph(folder);
+    const from = view.nodes.find((n) => n.id === a.id);
+    expect(from?.links.some((l) => l.to === b.id)).toBe(true);
+  });
+
+  it("relabels a node from its filename (vault file rename → label)", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("M");
+    const v = await engine.addVariable(folder, { label: "Birth Rate" });
+    // Simulate the user renaming the file in Obsidian's explorer: the file moves
+    // but its frontmatter (label "Birth Rate", id var_…) is untouched.
+    await storage.move(`${folder}/Nodes/Birth_Rate.md`, `${folder}/Nodes/Mortality.md`);
+
+    await engine.relabelNodeFromFilename(folder, "Mortality");
+
+    const node = (await engine.loadGraph(folder)).nodes.find((n) => n.id === v.id);
+    expect(node?.label).toBe("Mortality");
+    expect(await storage.exists(`${folder}/Nodes/Mortality.md`)).toBe(true);
+  });
+
+  it("normalizes spaces to underscores when relabeling from a spaced filename", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("M");
+    await engine.addVariable(folder, { label: "Pop" });
+    await storage.move(`${folder}/Nodes/Pop.md`, `${folder}/Nodes/My Var.md`);
+
+    await engine.relabelNodeFromFilename(folder, "My Var");
+
+    // Label takes the de-slugged name; the file converges to the underscore form.
+    const node = (await engine.loadGraph(folder)).nodes[0];
+    expect(node.label).toBe("My Var");
+    expect(await storage.exists(`${folder}/Nodes/My_Var.md`)).toBe(true);
+    expect(await storage.exists(`${folder}/Nodes/My Var.md`)).toBe(false);
+  });
+
+  it("migrates a legacy Nodes/<id>.md note to the label name on next write", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("M");
+    const v = await engine.addVariable(folder, { label: "Demand" });
+    // Simulate the previous (id-named) layout: move the file back to Nodes/<id>.md.
+    const body = await storage.read(`${folder}/Nodes/Demand.md`);
+    await storage.write(`${folder}/Nodes/${v.id}.md`, body);
+    await storage.remove(`${folder}/Nodes/Demand.md`);
+
+    // It still reads (resolved by frontmatter id)...
+    expect((await engine.loadGraph(folder)).nodes.find((n) => n.id === v.id)?.label).toBe("Demand");
+    // ...and the next write renames it to the label.
+    await engine.updateVariable(folder, v.id, { label: "Demand" });
+    expect(await storage.exists(`${folder}/Nodes/Demand.md`)).toBe(true);
+    expect(await storage.exists(`${folder}/Nodes/${v.id}.md`)).toBe(false);
   });
 });

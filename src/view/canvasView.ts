@@ -26,6 +26,7 @@ import type NeoloopyPlugin from "../main";
 import { GraphView, QuantPatch } from "../engine/engine";
 import { LoopType } from "../engine/types";
 import { ParentAnchor, linkPointsToModel } from "../engine/subsystemLinks";
+import { parentPath } from "../engine/storage";
 import { Camera, Point } from "./camera";
 import { loopNoteKey } from "./loopKeys";
 import { InsightPanel } from "./insightPanel";
@@ -679,9 +680,22 @@ export class CanvasView extends ItemView {
 
   /** Handle an Obsidian file-explorer rename. */
   private async onVaultRename(file: TAbstractFile, oldPath: string): Promise<void> {
+    // Our own renameModel moves the folder via fileManager.renameFile, which
+    // fires this very event; ignore writes we made (the title/label was already
+    // set deliberately) so we don't clobber it with the slugged basename.
+    if (this.liveWatcher.inSelfWrite()) return;
+
     if (!(file instanceof TFolder)) {
       // Renaming the bare `model.json` would un-model the folder; just resync.
-      if (file.name === "model.json" || oldPath.endsWith("/model.json")) this.pickerResync();
+      if (file.name === "model.json" || oldPath.endsWith("/model.json")) {
+        this.pickerResync();
+        return;
+      }
+      // A variable note renamed in the explorer (`…/Nodes/<stem>.md`): the label
+      // follows the filename — the node-level inverse of the folder→title sync.
+      if (file.path.endsWith(".md") && leafName(parentPath(file.path)) === "Nodes") {
+        await this.onNodeFileRename(file.path);
+      }
       return;
     }
     const newPath = file.path;
@@ -716,6 +730,24 @@ export class CanvasView extends ItemView {
       await this.reloadGraph(); // picks up the new manifest.name + path
       this.toolbar.setSelected(this.folder);
       this.refreshTitleChrome();
+      this.render();
+    }
+  }
+
+  /** A variable note was renamed in the vault (`<model>/Nodes/<stem>.md`): sync
+   *  the node's label to the new filename, then refresh if it's the open model. */
+  private async onNodeFileRename(newPath: string): Promise<void> {
+    const modelFolder = parentPath(parentPath(newPath));
+    const stem = leafName(newPath).replace(/\.md$/, "");
+    const models = await this.plugin.engine.listModels();
+    if (!models.some((m) => m.folder === modelFolder)) return;
+    try {
+      await this.model.relabelNodeFromFilename(modelFolder, stem);
+    } catch {
+      return; // unreadable/not a node note — leave it be
+    }
+    if (this.folder === modelFolder) {
+      await this.reloadGraph(); // picks up the new label (and any re-normalized filename)
       this.render();
     }
   }

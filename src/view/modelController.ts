@@ -46,6 +46,10 @@ export class ModelController {
     return this.guarded(() => this.engine.retitleModel(folder, name));
   }
 
+  relabelNodeFromFilename(folder: string, fileStem: string): Promise<void> {
+    return this.guarded(() => this.engine.relabelNodeFromFilename(folder, fileStem));
+  }
+
   addVariable(folder: string, init: NewVariable): Promise<VariableFile> {
     return this.guarded(() => this.engine.addVariable(folder, init));
   }

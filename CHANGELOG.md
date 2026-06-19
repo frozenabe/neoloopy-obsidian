@@ -5,6 +5,26 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-06-19
+
+### Added
+
+- **Variable notes are named after the variable.** A variable's note file is now
+  named after its label (`Birth_Rate.md`) instead of an opaque id, so the vault
+  reads like the diagram. The stable internal `var_…` id stays in the note's
+  frontmatter as the link target, so renaming a variable never breaks a causal
+  link. Two variables with the same name are suffixed `-2`/`-3`.
+- **Two-way variable name/file sync.** Renaming a variable on the canvas renames
+  its note file; renaming the note file in Obsidian's explorer updates the
+  variable's label (spaces map to underscores). This is the variable-level
+  complement of the title/folder sync added in 0.1.5.
+
+### Fixed
+
+- Renaming a model on the canvas no longer overwrites its title with the
+  lowercase-hyphen folder name. The folder move fired the same external-rename
+  handler 0.1.5 introduced, which then re-titled the model to its slug.
+
 ## [0.1.5] - 2026-06-19
 
 ### Added
@@ -72,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   annotate them, and export to JSON / Markdown / Mermaid — fully local and
   offline.
 
+[0.1.6]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.6
 [0.1.5]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.5
 [0.1.4]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.4
 [0.1.3]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.3
