@@ -90,11 +90,16 @@ rendering — so behavior tracks the existing key generator.
 
 ## Parity requirements
 
-- The two serializers must remain byte-identical. The new value always contains spaces, so
-  `scalar()` will quote it: `loop: "R · Births | Population"`. Verify TS `scalar()`
-  (`src/engine/loopNote.ts`) and Dart `NoteCodec.scalar()` treat the middot (U+00B7) and the
-  spaced pipe identically (both should quote on whitespace and emit the codepoint verbatim, no
-  escaping). Confirm against the existing parity-oracle test before landing.
+- The two serializers must remain byte-identical. Verified: TS `scalar()` (`src/engine/noteCodec.ts:151`)
+  and Dart `NoteCodec.scalar()` (`core/lib/vault/note_codec.dart:168`) are byte-identical and
+  quote ONLY on a leading special char, trailing whitespace, `": "`, `" #"`, newline, a
+  bool/null keyword, or a leading digit — **not** on internal spaces. So
+  `R · Births | Population` serializes **unquoted**: `loop: R · Births | Population`, and a
+  YAML plain scalar round-trips it (the middot is a literal, the mid-value `|` is not a block
+  indicator). The Dart `LoopNoteCodec.serialize` additionally writes an `h:` signature line
+  (`signature()` at `core/lib/vault/loop_note.dart:69` hashes `loopEcho`), so a Dart-rewritten
+  note's `h:` changes once with the new echo; TS does not write `h:`. The byte-parity oracle
+  (`test/loopNote.test.ts`) uses hard-coded echo values and stays green unchanged.
 - `loopEchoLabel` must be defined identically (same dedupe/sort/letter/edge-case rules) in both
   repos so any note written by either app round-trips losslessly.
 
