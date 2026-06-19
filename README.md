@@ -1,7 +1,5 @@
 # neoloopy for Obsidian
 
-**Home:** [neoloopy.com](https://neoloopy.com) · local-first systems-thinking for Obsidian.
-
 Build **causal-loop diagrams (CLDs)** for systems thinking directly in your
 vault. Variables are Markdown notes, links are causal arrows with polarity, and
 neoloopy finds the **reinforcing (R)** and **balancing (B)** feedback loops in
@@ -9,9 +7,8 @@ your model — all stored as plain files you own.
 
 ![Example causal-loop diagram](screenshots/example-model.png)
 
-<sub>A neoloopy model on the in-Obsidian canvas — variables as notes,
-polarity-signed causal links, and the detected reinforcing (R) and balancing
-(B) feedback loops.</sub>
+<sub>Diagram preview of a model (reinforcing + balancing loops). A screenshot of
+the live in-Obsidian canvas will replace this for the store listing.</sub>
 
 - **Local-first and offline.** Each model is a folder of Markdown notes plus a
   small `model.json` manifest. No account, no server, nothing leaves your
@@ -27,20 +24,19 @@ polarity-signed causal links, and the detected reinforcing (R) and balancing
   recentre on the linking variable.
 - **Export** to JSON, Markdown, or Mermaid.
 
-![Project-dynamics causal-loop diagram](screenshots/sample-model.png)
-
-<sub>A different domain — project dynamics (effort, schedule pressure, rework,
-burnout) — with the reinforcing and balancing loops detected and labelled
-(R1/R2/B1…) and the structure surfaced in the side panel.</sub>
-
 ## Install
 
 From Obsidian: **Settings → Community plugins → Browse → "neoloopy"**, then
-Enable. (During review/manual install, copy `main.js`, `manifest.json`, and
-`styles.css` into `<vault>/.obsidian/plugins/neoloopy/`.)
+Enable.
 
 Open the canvas from the ribbon (the fork icon) or the command **"neoloopy: Open
-canvas"**, then create a model and start adding variables.
+neoloopy canvas"**, then create a model and start adding variables.
+
+Already have a vault from the neoloopy app or CLI? Open that folder as your
+Obsidian vault (**Open folder as vault**) and the plugin finds every model
+automatically — it scans the whole vault for `model.json`, and they're the same
+Markdown files on disk, so there's nothing to sync. The reverse works too: point
+the `neoloopy` CLI at your existing Obsidian vault folder.
 
 ## Privacy — fully local, offline
 
@@ -48,10 +44,12 @@ canvas"**, then create a model and start adding variables.
 Everything runs in pure TypeScript on-device; your models stay in your vault.
 
 Quantitative System Dynamics *simulation* is not part of this plugin (it lives in
-the neoloopy app/CLI). Quantitative models are still **viewable** here, read-only:
-equations, units, initial values, observed-series counts, and reference-mode
-sparklines. The insight panel's "what-if" is a qualitative impact trace over your
-causal graph — no simulator, no network.
+the neoloopy app/CLI). Quantitative models are viewable and lightly **editable**
+here without a simulator: in the ƒx modal you can edit a node's equation (or a
+stock's initial value) and its units, written straight back to the vault note.
+The insight panel surfaces the qualitative structure — feedback loops, parents,
+exogenous drivers, and reference-mode sparklines — with no simulator and no
+network.
 
 ## Open source
 
@@ -64,7 +62,6 @@ readable TypeScript — no bundled binaries, no obfuscation, no network calls.
 npm install
 npm run dev        # esbuild watch → main.js
 npm run build      # typecheck + production bundle
-npm run lint       # eslint + eslint-plugin-obsidianmd (mirrors the store validator)
 npm test           # vitest (engine, codec, loop detection, geometry, Dart parity)
 ```
 
