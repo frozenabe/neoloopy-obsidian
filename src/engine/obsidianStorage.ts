@@ -2,8 +2,9 @@
  * VaultStorage backed by Obsidian's `Vault` API (the preferred surface over the
  * lower-level `Vault.adapter`). This is the only storage implementation that
  * imports `obsidian`; the engine and the interface stay clean so they unit-test
- * in plain Node against `MemoryStorage`. The `Vault` API is cross-platform
- * (desktop + mobile), so `isDesktopOnly: false` stays valid.
+ * in plain Node against `MemoryStorage`. The `Vault` API is itself
+ * cross-platform, but the plugin currently ships `isDesktopOnly: true`: the
+ * canvas UI isn't usable on mobile yet (see manifest.json).
  */
 
 import { TFile, TFolder, normalizePath } from "obsidian";
@@ -66,6 +67,16 @@ export class ObsidianStorage implements VaultStorage {
   async rmdir(path: string): Promise<void> {
     const f = this.vault.getAbstractFileByPath(normalizePath(path));
     if (f instanceof TFolder) await this.fileManager.trashFile(f);
+  }
+
+  async move(from: string, to: string): Promise<void> {
+    const src = this.vault.getAbstractFileByPath(normalizePath(from));
+    if (src == null) throw new Error(`ENOENT: ${from}`);
+    await this.mkdirs(parentPath(to));
+    // renameFile (not the raw adapter) rewrites every link that points into the
+    // moved file/folder — including the `[[../<dir>/System|alias]]` subsystem
+    // anchors a parent model holds on this one — so the move stays consistent.
+    await this.fileManager.renameFile(src, normalizePath(to));
   }
 
   async list(path: string): Promise<DirListing> {

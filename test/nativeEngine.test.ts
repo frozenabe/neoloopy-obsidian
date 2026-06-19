@@ -58,6 +58,66 @@ describe("NativeEngine — model lifecycle", () => {
     expect(a.folder).toBe("models/growth");
     expect(b.folder).toBe("models/growth-2");
   });
+
+  it("renames a model's title and syncs the folder to the new slug", async () => {
+    const { storage, engine } = makeEngine();
+    const ref = await engine.createModel("Old Name");
+    expect(ref.folder).toBe("models/old-name");
+
+    const renamed = await engine.renameModel(ref.folder, "New Name");
+    expect(renamed.name).toBe("New Name");
+    expect(renamed.id).toBe(ref.id);
+    expect(renamed.folder).toBe("models/new-name");
+
+    // The old folder is gone; the manifest now lives at the new path.
+    expect(await storage.exists("models/old-name")).toBe(false);
+    expect(await storage.exists("models/new-name/model.json")).toBe(true);
+
+    const list = await engine.listModels();
+    expect(list).toHaveLength(1);
+    expect(list[0].name).toBe("New Name");
+    expect(list[0].folder).toBe("models/new-name");
+  });
+
+  it("carries the model's notes to the renamed folder", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("Has Notes");
+    const v = await engine.addVariable(folder, { label: "Births" });
+
+    const renamed = await engine.renameModel(folder, "Renamed");
+    expect(await storage.exists(`models/renamed/Nodes/${v.id}.md`)).toBe(true);
+    expect(await storage.exists("models/has-notes")).toBe(false);
+
+    const view = await engine.loadGraph(renamed.folder);
+    expect(view.nodes.map((n) => n.label)).toContain("Births");
+  });
+
+  it("suffixes the folder when the new title collides with a sibling", async () => {
+    const { engine } = makeEngine();
+    await engine.createModel("Alpha");
+    const b = await engine.createModel("Beta");
+
+    const renamed = await engine.renameModel(b.folder, "Alpha");
+    expect(renamed.name).toBe("Alpha");
+    expect(renamed.folder).toBe("models/alpha-2"); // "alpha" is taken
+  });
+
+  it("keeps the folder put when the slug is unchanged", async () => {
+    const { engine } = makeEngine();
+    const { folder } = await engine.createModel("My Model");
+    const renamed = await engine.renameModel(folder, "My Model!!!"); // same slug
+    expect(renamed.folder).toBe("models/my-model");
+    expect(renamed.name).toBe("My Model!!!");
+  });
+
+  it("trims and rejects a blank new title", async () => {
+    const { engine } = makeEngine();
+    const { folder } = await engine.createModel("Keep Me");
+    const renamed = await engine.renameModel(folder, "  Trimmed  ");
+    expect(renamed.name).toBe("Trimmed");
+    expect(renamed.folder).toBe("models/trimmed");
+    await expect(engine.renameModel(renamed.folder, "   ")).rejects.toThrow();
+  });
 });
 
 describe("NativeEngine — variables and links", () => {

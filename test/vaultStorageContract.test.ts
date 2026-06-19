@@ -56,6 +56,30 @@ class FakeVault {
     await this.delete(file);
   }
 
+  // ObsidianStorage.move routes through FileManager.renameFile; the fake moves
+  // the entry (and, for a folder, its whole subtree) to the new path. Real
+  // Obsidian also rewrites links here — not modelled, as the fake has no index.
+  async renameFile(file: TAbstractFile, newPath: string): Promise<void> {
+    const src = file.path;
+    const dst = normalizePath(newPath);
+    if (src === dst) return;
+    const prefix = src + "/";
+    const moved = (p: string): string =>
+      p === src ? dst : dst + "/" + p.substring(prefix.length);
+    for (const f of [...this.files.keys()]) {
+      if (f === src || f.startsWith(prefix)) {
+        this.files.set(moved(f), this.files.get(f)!);
+        this.files.delete(f);
+      }
+    }
+    for (const d of [...this.folders]) {
+      if (d === src || d.startsWith(prefix)) {
+        this.folders.delete(d);
+        this.folders.add(moved(d));
+      }
+    }
+  }
+
   async createFolder(path: string): Promise<TFolder> {
     const p = normalizePath(path);
     if (this.folders.has(p) || this.files.has(p)) throw new Error(`EEXIST: ${p}`);
@@ -179,5 +203,24 @@ describe.each(backends)("VaultStorage contract: %s", (_name, make) => {
     expect(await s.exists("root/sub")).toBe(false);
     expect(await s.exists("root/sub/a.md")).toBe(false);
     expect(await s.exists("root/keep.md")).toBe(true);
+  });
+
+  it("move renames a file and carries a whole subtree to a new parent", async () => {
+    const s = make();
+
+    // A single file.
+    await s.write("a.md", "alpha");
+    await s.move("a.md", "b.md");
+    expect(await s.exists("a.md")).toBe(false);
+    expect(await s.read("b.md")).toBe("alpha");
+
+    // A folder subtree into a not-yet-existing parent.
+    await s.write("src/one.md", "1");
+    await s.write("src/sub/two.md", "2");
+    await s.move("src", "dst/moved");
+    expect(await s.exists("src")).toBe(false);
+    expect(await s.read("dst/moved/one.md")).toBe("1");
+    expect(await s.read("dst/moved/sub/two.md")).toBe("2");
+    expect(await s.exists("dst/moved/sub")).toBe(true);
   });
 });

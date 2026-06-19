@@ -14,6 +14,81 @@ const isNumeric = (s: string): boolean => {
   return t.length > 0 && !Number.isNaN(Number(t));
 };
 
+interface PromptOptions {
+  title: string;
+  placeholder?: string;
+  initial?: string;
+  cta?: string;
+}
+
+/**
+ * A minimal single-line text prompt — the small modal the canvas uses to ask
+ * for a model's title on create, and a new title on rename. Enter or the CTA
+ * commits the trimmed value; Escape, Cancel, or the backdrop cancels; an empty
+ * value never commits. Resolves exactly once: the entered string, or null on
+ * cancel.
+ */
+export function promptText(app: App, opts: PromptOptions): Promise<string | null> {
+  return new Promise((resolve) => new PromptModal(app, opts, resolve).open());
+}
+
+class PromptModal extends Modal {
+  private committed = false;
+
+  constructor(
+    app: App,
+    private readonly opts: PromptOptions,
+    private readonly resolve: (value: string | null) => void,
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.titleEl.setText(this.opts.title);
+    this.modalEl.addClass("neoloopy-prompt-modal");
+    const c = this.contentEl;
+
+    const input = c.createEl("input", { type: "text", cls: "neoloopy-prompt-input" });
+    input.value = this.opts.initial ?? "";
+    if (this.opts.placeholder) input.placeholder = this.opts.placeholder;
+
+    const actions = c.createDiv({ cls: "neoloopy-prompt-actions" });
+    const ok = actions.createEl("button", { cls: "mod-cta", text: this.opts.cta ?? "OK" });
+    const cancel = actions.createEl("button", { text: "Cancel" });
+
+    const commit = (): void => {
+      const value = input.value.trim();
+      if (value.length === 0) return; // never commit an empty title
+      this.committed = true;
+      this.resolve(value);
+      this.close();
+    };
+    ok.addEventListener("click", commit);
+    cancel.addEventListener("click", () => this.close());
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        commit();
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        this.close();
+      }
+    });
+
+    window.setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    // Any close that did not go through `commit` (Escape, Cancel, backdrop) is a
+    // cancellation — resolve null, exactly once.
+    if (!this.committed) this.resolve(null);
+  }
+}
+
 /**
  * The ƒx modal — view/edit a variable's *engineless* quantitative definition
  * (no simulation): the editable initial (stock) or equation (flow/aux) and its

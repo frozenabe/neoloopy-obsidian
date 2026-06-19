@@ -18,6 +18,7 @@ export interface ToolbarHost {
   currentFolder(): string | null;
   openModel(folder: string): void;
   newModel(): void;
+  renameModel(): void;
   tidy(): void;
   openExportMenu(evt: MouseEvent): void;
   toggleInsightPanel(): void;
@@ -42,6 +43,13 @@ export class CanvasToolbar {
       .setTooltip("New model")
       .onClick(() => host.newModel())
       .buttonEl.addClass("neoloopy-new-model");
+
+    // Rename the current model's title — sits with the picker it acts on.
+    new ButtonComponent(bar)
+      .setIcon("pencil")
+      .setTooltip("Rename model")
+      .onClick(() => host.renameModel())
+      .buttonEl.addClass("neoloopy-rename-model");
 
     bar.createDiv({ cls: "neoloopy-toolbar-spacer" });
 

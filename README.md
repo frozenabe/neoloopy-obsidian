@@ -3,7 +3,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/frozenabe/neoloopy-obsidian?sort=semver&display_name=tag)](https://github.com/frozenabe/neoloopy-obsidian/releases/latest)
 [![Total downloads](https://img.shields.io/github/downloads/frozenabe/neoloopy-obsidian/total)](https://github.com/frozenabe/neoloopy-obsidian/releases)
 [![License: MIT](https://img.shields.io/github/license/frozenabe/neoloopy-obsidian)](LICENSE)
-![Works on desktop and mobile](https://img.shields.io/badge/Obsidian-desktop%20%26%20mobile-7c3aed)
+![Works on desktop](https://img.shields.io/badge/Obsidian-desktop-7c3aed)
 
 > **Think in systems, not lists.** neoloopy turns your vault into a
 > **causal-loop diagramming** tool: map how variables push and pull on each
@@ -81,8 +81,9 @@ thinking already lives.
   recentre on the linking variable.
 - 📤 **Export** a model to **JSON**, **Markdown**, or **Mermaid** with one
   command.
-- 📱 **Desktop and mobile.** Pure on-device TypeScript; runs anywhere Obsidian
-  does.
+- 🖥️ **Desktop.** Pure on-device TypeScript. Mobile (iOS/Android) is not
+  supported yet — the canvas isn't usable on touch devices, so the plugin ships
+  desktop-only for now.
 
 ## Installation
 
@@ -116,7 +117,9 @@ plugin** with the repository `frozenabe/neoloopy-obsidian`.
 
 1. Open the canvas from the **fork icon** in the left ribbon, or run the command
    **"neoloopy: Open canvas"** from the command palette (`Ctrl/Cmd-P`).
-2. Run **"neoloopy: Create new model"** (or use the canvas) to start a model.
+2. Run **"neoloopy: Create new model"** (or the **+** in the canvas header) and
+   type a title when prompted to start a model. Rename it any time with the
+   **pencil** button next to the model picker, or **"neoloopy: Rename model"**.
 3. Add a variable, then drag from one variable to another to draw a causal link
    and pick its polarity.
 4. Build out the structure — neoloopy highlights the **R** and **B** loops as
@@ -138,7 +141,8 @@ prefix. Commands marked *(canvas)* act on the model in the active canvas.
 | Command | What it does |
 | --- | --- |
 | **Open canvas** | Open or focus the neoloopy canvas. |
-| **Create new model** | Start a new model in your default model folder. |
+| **Create new model** | Prompt for a title, then start a new model in your default model folder. |
+| **Rename model** *(canvas)* | Change the current model's title. |
 | **Add variable** *(canvas)* | Add a variable to the current model. |
 | **Tidy layout** *(canvas)* | Auto-arrange the nodes. |
 | **Detect feedback loops** *(canvas)* | Report the reinforcing/balancing loops. |

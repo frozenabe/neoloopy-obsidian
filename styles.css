@@ -558,6 +558,18 @@
   margin-top: 18px;
 }
 
+/* ---- title prompt (new / rename model) ----------------------------------- */
+.neoloopy-prompt-input {
+  width: 100%;
+}
+
+.neoloopy-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
 /* ---- insight panel ------------------------------------------------------- */
 .neoloopy-canvas-split {
   display: flex;

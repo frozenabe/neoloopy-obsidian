@@ -29,7 +29,7 @@ import { loopNoteKey } from "./loopKeys";
 import { InsightPanel } from "./insightPanel";
 import { CanvasToolbar } from "./canvasToolbar";
 import { SelectionChrome } from "./selectionChrome";
-import { EquationModal } from "./dialogs";
+import { EquationModal, promptText } from "./dialogs";
 import { LoopHighlight, Scene, paint } from "./painter";
 import { Theme, resolveTheme } from "./theme";
 import { SceneCache } from "./sceneCache";
@@ -137,6 +137,7 @@ export class CanvasView extends ItemView {
       currentFolder: () => this.folder,
       openModel: (folder) => void this.openModel(folder),
       newModel: () => void this.newModel(),
+      renameModel: () => void this.renameModel(),
       tidy: () => void this.tidy(),
       openExportMenu: (evt) => this.openExportMenu(evt),
       toggleInsightPanel: () => this.toggleInsightPanel(),
@@ -282,6 +283,10 @@ export class CanvasView extends ItemView {
     await this.newModel();
   }
 
+  async cmdRenameModel(): Promise<void> {
+    await this.renameModel();
+  }
+
   async cmdAddVariable(): Promise<void> {
     await this.addVariableAtCenter();
   }
@@ -348,12 +353,20 @@ export class CanvasView extends ItemView {
       }
     }
     await this.refreshParents(folder);
-    // The tab title comes from getDisplayText() (the current model name), but
-    // Obsidian caches it until the leaf is told to refresh — without this the
-    // tab keeps the first model's name. updateHeader() re-reads it for the TAB;
-    // it does NOT re-read the inline view-header title (`view.titleEl`), which
-    // is set once at view-load (when no model is open). Set that one directly so
-    // the tab and the centered header agree on the live model name.
+    this.refreshTitleChrome();
+  }
+
+  /**
+   * Push the live model name into both the tab title and the centered view
+   * header. The tab title comes from getDisplayText(), but Obsidian caches it
+   * until the leaf is told to refresh — without updateHeader() the tab keeps the
+   * previous model's name. updateHeader() re-reads it for the TAB; it does NOT
+   * re-read the inline view-header title (`view.titleEl`), which is set once at
+   * view-load (when no model is open). Set that one directly so the tab and the
+   * centered header agree on the live model name. Called on model switch and on
+   * rename.
+   */
+  private refreshTitleChrome(): void {
     (this.leaf as unknown as { updateHeader(): void }).updateHeader();
     const titleEl = (this as unknown as { titleEl?: { setText(t: string): void } }).titleEl;
     if (titleEl) titleEl.setText(this.getDisplayText());
@@ -384,7 +397,13 @@ export class CanvasView extends ItemView {
   }
 
   private async newModel(): Promise<void> {
-    const name = `Model ${new Date().toLocaleDateString()}`;
+    const name = await promptText(this.app, {
+      title: "New model",
+      placeholder: "Model title",
+      initial: `Model ${new Date().toLocaleDateString()}`,
+      cta: "Create",
+    });
+    if (name === null) return; // cancelled the prompt
     // The `+` handler runs as `void this.newModel()`, so a rejected createModel
     // would otherwise vanish into an unhandled rejection — the click looks dead.
     // Catch it and surface the reason instead.
@@ -395,6 +414,45 @@ export class CanvasView extends ItemView {
       new Notice(`Created "${ref.name}"`);
     } catch (e) {
       new Notice(`Couldn't create model: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  private async renameModel(): Promise<void> {
+    const folder = this.folder;
+    const graph = this.graph;
+    if (!folder || !graph) {
+      new Notice("Open or create a model first.");
+      return;
+    }
+    const current = graph.manifest.name;
+    const name = await promptText(this.app, {
+      title: "Rename model",
+      placeholder: "Model title",
+      initial: current,
+      cta: "Rename",
+    });
+    if (name === null || name === current) return; // cancelled or unchanged
+    try {
+      const ref = await this.model.renameModel(folder, name);
+      // The folder may have moved on disk (the title's slug changed). Repoint the
+      // view, its per-folder camera memory, and the live graph so later reads/
+      // writes and the picker all target the new path.
+      this.folder = ref.folder;
+      if (folder !== ref.folder) {
+        const mem = viewMemory.get(folder);
+        if (mem) {
+          viewMemory.set(ref.folder, mem);
+          viewMemory.delete(folder);
+        }
+      }
+      graph.manifest.name = ref.name;
+      graph.folder = ref.folder;
+      await this.toolbar.refreshModelList();
+      this.toolbar.setSelected(ref.folder);
+      this.refreshTitleChrome();
+      new Notice(`Renamed to "${ref.name}"`);
+    } catch (e) {
+      new Notice(`Couldn't rename model: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

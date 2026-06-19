@@ -38,6 +38,10 @@ export class ModelController {
     return this.guarded(() => this.engine.createModel(name));
   }
 
+  renameModel(folder: string, name: string): Promise<ModelRef> {
+    return this.guarded(() => this.engine.renameModel(folder, name));
+  }
+
   addVariable(folder: string, init: NewVariable): Promise<VariableFile> {
     return this.guarded(() => this.engine.addVariable(folder, init));
   }

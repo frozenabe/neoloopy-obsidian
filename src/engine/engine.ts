@@ -122,6 +122,13 @@ export type ExportFormat = "json" | "mermaid" | "markdown";
 export interface NeoloopyEngine {
   listModels(): Promise<ModelRef[]>;
   createModel(name: string): Promise<ModelRef>;
+  /**
+   * Change a model's display title (the `model.json` `name`). The folder path
+   * and model id stay put — only the title and `modified` timestamp move, so
+   * open files, wikilinks, and subsystem anchors all keep working. Rejects a
+   * blank title.
+   */
+  renameModel(folder: string, name: string): Promise<ModelRef>;
   deleteModel(folder: string): Promise<void>;
   loadGraph(folder: string): Promise<GraphView>;
 

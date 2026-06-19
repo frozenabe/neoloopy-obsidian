@@ -68,6 +68,7 @@ import {
   VaultStorage,
   baseName,
   joinPath,
+  parentPath,
 } from "./storage";
 import { ParentAnchor, deriveParentAnchors } from "./subsystemLinks";
 
@@ -150,6 +151,60 @@ export class NativeEngine implements NeoloopyEngine {
     };
     await this.writeManifest(folder, manifest);
     return { id: modelId, name, folder, group: null, modified: now, variableCount: 0, quant: false };
+  }
+
+  async renameModel(folder: string, name: string): Promise<ModelRef> {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw new Error("Model title cannot be empty.");
+    }
+    const manifest = await this.readManifest(folder);
+
+    // Keep the folder name in sync with the title, using the same slug rule and
+    // `-2/-3…` collision suffixing as createModel. Renaming the leaf within the
+    // model's current parent dir preserves any folder organization. Skip the move
+    // when the slug is unchanged (e.g. punctuation-only edits) so we don't churn
+    // paths — and so we never collide the folder with itself.
+    const dest = await this.destForRename(folder, trimmed);
+
+    // Write the new title into model.json first (at the current path), then move
+    // the folder so links settle around the final location.
+    const updated: ModelManifest = {
+      ...manifest,
+      name: trimmed,
+      modified: new Date().toISOString(),
+    };
+    await this.writeManifest(folder, updated);
+    if (dest !== folder) {
+      await this.storage.move(folder, dest);
+    }
+
+    const notes = await this.listNoteFiles(dest);
+    return {
+      id: updated.id,
+      name: updated.name,
+      folder: dest,
+      group: updated.folder ?? null,
+      modified: updated.modified,
+      variableCount: notes.length,
+      quant: manifestIsQuant(updated),
+    };
+  }
+
+  /** Target folder for renaming `folder`'s model to `name`: the new slug under
+   *  the same parent, suffixed on collision; unchanged when the slug matches. */
+  private async destForRename(folder: string, name: string): Promise<string> {
+    const current = baseName(folder);
+    const desired = slug(name) || current;
+    if (desired === current) return folder;
+    const parent = parentPath(folder);
+    let leaf = desired;
+    let n = 2;
+    while (await this.storage.exists(joinPath(parent, leaf))) {
+      leaf = `${desired}-${n}`;
+      n++;
+    }
+    return joinPath(parent, leaf);
   }
 
   async deleteModel(folder: string): Promise<void> {

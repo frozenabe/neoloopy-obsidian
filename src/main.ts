@@ -66,6 +66,7 @@ export default class NeoloopyPlugin extends Plugin {
       });
     };
 
+    onCanvas("rename-model", "Rename model", (v) => void v.cmdRenameModel());
     onCanvas("add-variable", "Add variable", (v) => void v.cmdAddVariable());
     onCanvas("tidy-layout", "Tidy layout", (v) => void v.cmdTidy());
     onCanvas("detect-loops", "Detect feedback loops", (v) => v.reportLoops());

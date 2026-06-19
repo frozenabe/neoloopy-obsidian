@@ -21,6 +21,14 @@ export interface VaultStorage {
   mkdirs(path: string): Promise<void>;
   /** Remove a folder and everything under it. */
   rmdir(path: string): Promise<void>;
+  /**
+   * Move/rename a file or folder (and everything under it) from one
+   * vault-relative path to another, creating the destination's parent as needed.
+   * The Obsidian implementation routes through `fileManager.renameFile` so every
+   * wikilink/backlink pointing into the moved tree (subsystem anchors included)
+   * is rewritten to the new location.
+   */
+  move(from: string, to: string): Promise<void>;
   /** Immediate children of `path` (vault-relative paths). */
   list(path: string): Promise<DirListing>;
 }
@@ -89,6 +97,27 @@ export class MemoryStorage implements VaultStorage {
     }
     for (const d of [...this.folders]) {
       if (d === p || d.startsWith(prefix)) this.folders.delete(d);
+    }
+  }
+
+  async move(from: string, to: string): Promise<void> {
+    const src = joinPath(from);
+    const dst = joinPath(to);
+    if (src === dst) return;
+    await this.mkdirs(parentPath(dst));
+    const prefix = src + "/";
+    const rename = (p: string): string => (p === src ? dst : dst + "/" + p.substring(prefix.length));
+    for (const f of [...this.files.keys()]) {
+      if (f === src || f.startsWith(prefix)) {
+        this.files.set(rename(f), this.files.get(f)!);
+        this.files.delete(f);
+      }
+    }
+    for (const d of [...this.folders]) {
+      if (d === src || d.startsWith(prefix)) {
+        this.folders.delete(d);
+        this.folders.add(rename(d));
+      }
     }
   }
 
