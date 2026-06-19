@@ -118,6 +118,33 @@ describe("NativeEngine — model lifecycle", () => {
     expect(renamed.folder).toBe("models/trimmed");
     await expect(engine.renameModel(renamed.folder, "   ")).rejects.toThrow();
   });
+
+  it("retitles a model in place without moving its folder (folder → title sync)", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("Original");
+    expect(folder).toBe("models/original");
+
+    // Mirrors an external folder rename: the directory is already where the user
+    // put it, so only the title (model.json name) follows — no re-slug, no move.
+    const ref = await engine.retitleModel(folder, "Renamed In Vault");
+    expect(ref.name).toBe("Renamed In Vault");
+    expect(ref.folder).toBe(folder); // folder stays put
+    expect(await storage.exists("models/original/model.json")).toBe(true);
+    expect(ref.modified >= (await engine.listModels())[0].modified).toBe(true);
+
+    const list = await engine.listModels();
+    expect(list).toHaveLength(1);
+    expect(list[0].name).toBe("Renamed In Vault");
+    expect(list[0].folder).toBe(folder);
+  });
+
+  it("trims and rejects a blank retitle", async () => {
+    const { engine } = makeEngine();
+    const { folder } = await engine.createModel("Keep");
+    const ref = await engine.retitleModel(folder, "  Spaced  ");
+    expect(ref.name).toBe("Spaced");
+    await expect(engine.retitleModel(folder, "   ")).rejects.toThrow();
+  });
 });
 
 describe("NativeEngine — variables and links", () => {

@@ -16,6 +16,8 @@ import {
   ItemView,
   Menu,
   Notice,
+  TAbstractFile,
+  TFolder,
   WorkspaceLeaf,
   debounce,
   normalizePath,
@@ -39,11 +41,18 @@ import { ModelController } from "./modelController";
 import { LiveEditWatcher } from "./liveEditWatcher";
 import { SelectionAnimator } from "./selectionAnimator";
 import { EdgeGeom, loopEdgeIds } from "./geometry";
+import { reconcileActiveModel } from "./modelPicker";
 
 export const VIEW_TYPE_CANVAS = "neoloopy-canvas";
 
 /** Session-only camera memory per model folder (mirrors the app's _viewMemory). */
 const viewMemory = new Map<string, { tx: number; ty: number; scale: number }>();
+
+/** Last path segment (folder/file basename) of a vault-relative path. */
+function leafName(path: string): string {
+  const parts = path.split("/").filter((s) => s.length > 0);
+  return parts.length > 0 ? parts[parts.length - 1] : path;
+}
 
 export class CanvasView extends ItemView {
   private readonly plugin: NeoloopyPlugin;
@@ -374,6 +383,14 @@ export class CanvasView extends ItemView {
 
   private async reloadGraph(): Promise<void> {
     if (!this.folder) return;
+    // The open model's folder can vanish between a scheduled reload and now: an
+    // external delete fires the live watcher, which then reloads against a
+    // missing manifest. Bail (dropping the stale graph) instead of throwing —
+    // the picker resync that runs alongside switches away from the deleted model.
+    if (this.app.vault.getAbstractFileByPath(normalizePath(this.folder)) == null) {
+      this.graph = null;
+      return;
+    }
     this.graph = await this.plugin.engine.loadGraph(this.folder);
     // The graph's labels (and thus every derived loop key) may have changed.
     this.loopKeyMemo.clear();
@@ -593,9 +610,15 @@ export class CanvasView extends ItemView {
   /** Canvas pointer/keyboard events are bound by PointerInteraction and
    *  KeyboardController; the view only watches the vault for external edits. */
   private registerVaultEvents(): void {
-    this.registerEvent(this.app.vault.on("modify", (f) => this.liveWatcher.onVaultChange(f)));
-    this.registerEvent(this.app.vault.on("create", (f) => this.liveWatcher.onVaultChange(f)));
-    this.registerEvent(this.app.vault.on("delete", (f) => this.liveWatcher.onVaultChange(f)));
+    this.registerEvent(this.app.vault.on("modify", (f) => this.onVaultChange(f)));
+    this.registerEvent(this.app.vault.on("create", (f) => this.onVaultChange(f)));
+    this.registerEvent(this.app.vault.on("delete", (f) => this.onVaultChange(f)));
+    // Renaming a model's folder in Obsidian's file explorer drives the title
+    // (folder is canonical for an external rename — the user's choice) and keeps
+    // the open model pointed at its new path.
+    this.registerEvent(
+      this.app.vault.on("rename", (f, oldPath) => void this.onVaultRename(f, oldPath)),
+    );
     // A theme/appearance switch changes the resolved CSS colors — drop the cache
     // so the next render repaints in the new palette.
     this.registerEvent(
@@ -604,6 +627,109 @@ export class CanvasView extends ItemView {
         this.render();
       }),
     );
+  }
+
+  /**
+   * Every modify/create/delete feeds the live-edit watcher (which only reacts to
+   * the open model's own files). A change to a model folder or a `model.json`
+   * also changes the *set* of models on disk, so it resyncs the picker — that's
+   * what makes an external folder delete drop out of the dropdown live, instead
+   * of lingering until the next canvas refresh.
+   */
+  private onVaultChange(file: TAbstractFile): void {
+    this.liveWatcher.onVaultChange(file);
+    if (file instanceof TFolder || file.name === "model.json") {
+      this.pickerResync();
+    }
+  }
+
+  /** Debounced: a folder delete fires one event but a model create can fan out
+   *  several, and our own writes touch `model.json`; coalesce them. */
+  private readonly pickerResync = debounce(() => void this.applyPickerResync(), 150, true);
+
+  private async applyPickerResync(): Promise<void> {
+    await this.toolbar.refreshModelList();
+    const models = await this.plugin.engine.listModels();
+    const decision = reconcileActiveModel(models, this.folder);
+    if (decision.action === "switch") {
+      await this.openModel(decision.folder);
+      return;
+    }
+    if (decision.action === "clear") {
+      this.clearOpenModel();
+      return;
+    }
+    // keep: the rebuild cleared the <select>; re-point it at the open model and
+    // refresh the tab/header in case its title was edited externally.
+    if (this.folder) {
+      this.toolbar.setSelected(this.folder);
+      this.refreshTitleChrome();
+    }
+  }
+
+  /** The open model's folder was deleted externally — drop to the empty state. */
+  private clearOpenModel(): void {
+    this.folder = null;
+    this.graph = null;
+    this.scene = null;
+    this.select(null, null, null);
+    this.refreshTitleChrome();
+    this.render();
+  }
+
+  /** Handle an Obsidian file-explorer rename. */
+  private async onVaultRename(file: TAbstractFile, oldPath: string): Promise<void> {
+    if (!(file instanceof TFolder)) {
+      // Renaming the bare `model.json` would un-model the folder; just resync.
+      if (file.name === "model.json" || oldPath.endsWith("/model.json")) this.pickerResync();
+      return;
+    }
+    const newPath = file.path;
+
+    // If the renamed folder is itself a model (holds model.json), the title
+    // follows the folder: rewrite model.json's name to the new folder name in
+    // place — no re-slug, no move (we'd be fighting the rename the user made).
+    // Renaming an ancestor folder only shifts paths; the re-point + rebuild
+    // below handle that without touching any title.
+    const models = await this.plugin.engine.listModels();
+    const renamed = models.find((m) => m.folder === newPath);
+    if (renamed) {
+      const title = leafName(newPath);
+      if (renamed.name !== title) {
+        try {
+          await this.model.retitleModel(newPath, title);
+        } catch {
+          /* keep the existing title if the in-place write fails */
+        }
+      }
+    }
+
+    // Follow the open model to its new path if it (or an ancestor) was renamed.
+    if (this.folder === oldPath) {
+      this.repointFolder(oldPath, newPath);
+    } else if (this.folder && this.folder.startsWith(oldPath + "/")) {
+      this.repointFolder(this.folder, newPath + this.folder.slice(oldPath.length));
+    }
+
+    await this.toolbar.refreshModelList();
+    if (this.folder) {
+      await this.reloadGraph(); // picks up the new manifest.name + path
+      this.toolbar.setSelected(this.folder);
+      this.refreshTitleChrome();
+      this.render();
+    }
+  }
+
+  /** Move the open model's folder reference (and its camera memory) to a new
+   *  path after an external rename, so later reads/writes target the new dir. */
+  private repointFolder(from: string, to: string): void {
+    const mem = viewMemory.get(from);
+    if (mem) {
+      viewMemory.set(to, mem);
+      viewMemory.delete(from);
+    }
+    this.folder = to;
+    if (this.graph) this.graph.folder = to;
   }
 
   private async createNodeAt(world: Point): Promise<void> {

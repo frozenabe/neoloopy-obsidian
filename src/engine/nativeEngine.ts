@@ -191,6 +191,35 @@ export class NativeEngine implements NeoloopyEngine {
     };
   }
 
+  async retitleModel(folder: string, name: string): Promise<ModelRef> {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw new Error("Model title cannot be empty.");
+    }
+    // The inverse of renameModel: the folder is already where the user put it
+    // (e.g. they renamed it in Obsidian's file explorer), so the title follows
+    // the folder. Write the new name into model.json in place — never re-slug or
+    // move the directory, or we'd fight the rename the user just made.
+    const manifest = await this.readManifest(folder);
+    const updated: ModelManifest = {
+      ...manifest,
+      name: trimmed,
+      modified: new Date().toISOString(),
+    };
+    await this.writeManifest(folder, updated);
+
+    const notes = await this.listNoteFiles(folder);
+    return {
+      id: updated.id,
+      name: updated.name,
+      folder,
+      group: updated.folder ?? null,
+      modified: updated.modified,
+      variableCount: notes.length,
+      quant: manifestIsQuant(updated),
+    };
+  }
+
   /** Target folder for renaming `folder`'s model to `name`: the new slug under
    *  the same parent, suffixed on collision; unchanged when the slug matches. */
   private async destForRename(folder: string, name: string): Promise<string> {

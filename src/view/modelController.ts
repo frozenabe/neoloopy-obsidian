@@ -42,6 +42,10 @@ export class ModelController {
     return this.guarded(() => this.engine.renameModel(folder, name));
   }
 
+  retitleModel(folder: string, name: string): Promise<ModelRef> {
+    return this.guarded(() => this.engine.retitleModel(folder, name));
+  }
+
   addVariable(folder: string, init: NewVariable): Promise<VariableFile> {
     return this.guarded(() => this.engine.addVariable(folder, init));
   }

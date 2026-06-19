@@ -123,12 +123,18 @@ export interface NeoloopyEngine {
   listModels(): Promise<ModelRef[]>;
   createModel(name: string): Promise<ModelRef>;
   /**
-   * Change a model's display title (the `model.json` `name`). The folder path
-   * and model id stay put — only the title and `modified` timestamp move, so
-   * open files, wikilinks, and subsystem anchors all keep working. Rejects a
-   * blank title.
+   * Rename a model from the canvas (title is canonical): set the `model.json`
+   * `name` AND re-slug + move the folder to match, suffixing `-2/-3…` on
+   * collision. The move is link-aware so wikilinks and subsystem anchors follow.
+   * Skips the move when the slug is unchanged. Rejects a blank title.
    */
   renameModel(folder: string, name: string): Promise<ModelRef>;
+  /**
+   * The inverse of renameModel for an *external* folder rename (folder is
+   * canonical): set the `model.json` `name` to the new folder name IN PLACE,
+   * without re-slugging or moving the directory. Rejects a blank title.
+   */
+  retitleModel(folder: string, name: string): Promise<ModelRef>;
   deleteModel(folder: string): Promise<void>;
   loadGraph(folder: string): Promise<GraphView>;
 
