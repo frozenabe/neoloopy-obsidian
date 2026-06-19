@@ -5,7 +5,7 @@ vault. Variables are Markdown notes, links are causal arrows with polarity, and
 neoloopy finds the **reinforcing (R)** and **balancing (B)** feedback loops in
 your model — all stored as plain files you own.
 
-![Example causal-loop diagram](screenshots/example-model.svg)
+![Example causal-loop diagram](screenshots/example-model.png)
 
 <sub>Diagram preview of a model (reinforcing + balancing loops). A screenshot of
 the live in-Obsidian canvas will replace this for the store listing.</sub>
