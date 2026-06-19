@@ -1,0 +1,670 @@
+/* neoloopy — canvas view styling. All static styling lives here: Obsidian's
+   community-plugin guidelines disallow assigning static styles from JS. The only
+   property set from JS is the rename input's dynamic on-screen position, passed
+   in through CSS custom properties. Colors prefer Obsidian theme variables. */
+
+.neoloopy-canvas-root {
+  display: flex;
+  flex-direction: column;
+}
+
+.neoloopy-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-wrap: wrap;
+}
+
+.neoloopy-toolbar-spacer {
+  flex: 1;
+}
+
+/* `+ New model` matches the app's model-list FAB: a solid black button with a
+   white glyph (t.ink #1F2329 surface, white +), floated with a soft shadow.
+   Hardcoded so it reads as that same control in every theme. */
+.neoloopy-toolbar .neoloopy-new-model {
+  background-color: #1f2329;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.neoloopy-toolbar .neoloopy-new-model:hover {
+  background-color: #2c313a;
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.neoloopy-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.neoloopy-canvas {
+  width: 100%;
+  height: 100%;
+  outline: none;
+  touch-action: none;
+}
+
+.neoloopy-live-chip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-on-accent, #fff);
+  background: #756dcb;
+  pointer-events: none;
+  display: none;
+}
+
+.neoloopy-live-chip.is-visible {
+  display: block;
+}
+
+.neoloopy-rename-input {
+  position: absolute;
+  left: var(--nl-rename-left, 0);
+  top: var(--nl-rename-top, 0);
+  width: 140px;
+  font: 600 13px var(--font-interface, sans-serif);
+  text-align: center;
+  border-radius: 8px;
+  border: 1.6px solid var(--interactive-accent);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  padding: 6px 8px;
+  z-index: 20;
+}
+
+/* ---- on-canvas selection chrome (menus, badge note, trash) --------------
+   These float over the canvas, so they use the same neoloopy paper/surface
+   tokens as the painter (NOT Obsidian's chrome vars) and switch with the
+   document theme — keeping the menus pixel-consistent with the diagram. */
+
+.neoloopy-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+  --nl-surface: #fffefd;
+  --nl-ink: #1f2329;
+  --nl-ink2: #585b61;
+  --nl-ink3: #6e7176;
+  --nl-line2: #d0cfcb;
+  --nl-graphite: #4a4d53;
+  --nl-teal: #1c7e7e;
+  --nl-shadow: rgba(0, 0, 0, 0.18);
+}
+
+.theme-dark .neoloopy-overlay {
+  --nl-surface: #1f2329;
+  --nl-ink: #ebedef;
+  --nl-ink2: #aeb1b6;
+  --nl-ink3: #83868c;
+  --nl-line2: #43484f;
+  --nl-graphite: #a0a5ac;
+  --nl-teal: #44bcbc;
+  --nl-shadow: rgba(0, 0, 0, 0.45);
+}
+
+/* Circular ⋯ toggle that reveals a menu; flips to a teal ✕ while open. */
+.neoloopy-overlay .neoloopy-toggle {
+  position: absolute;
+  left: var(--nl-x, 0);
+  top: var(--nl-y, 0);
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--nl-surface);
+  color: var(--nl-ink2);
+  box-shadow: 0 2px 8px var(--nl-shadow);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.neoloopy-toggle.is-visible {
+  display: inline-flex;
+}
+
+.neoloopy-toggle.is-open {
+  background: var(--nl-teal);
+  color: #fff;
+}
+
+.neoloopy-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* A floating control panel: lays out white "pill" groups in a column (node) or
+   a row (edge); the panel itself is transparent. */
+.neoloopy-popover {
+  position: absolute;
+  left: var(--nl-x, 0);
+  top: var(--nl-y, 0);
+  transform: translateX(-50%);
+  display: none;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.neoloopy-popover.is-visible {
+  display: flex;
+}
+
+.neoloopy-node-menu {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* Top row of the node menu: shape picker + subsystem button, side by side. */
+.neoloopy-node-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.neoloopy-edge-menu {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* White rounded "pill" container shared by kind picker, palette, polarity. */
+.neoloopy-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--nl-surface);
+  box-shadow: 0 3px 12px var(--nl-shadow);
+}
+
+/* Kind picker: three shape chips; the active kind reads as a filled chip. */
+.neoloopy-overlay .neoloopy-kind-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background-color: transparent;
+  color: var(--nl-graphite);
+  cursor: pointer;
+}
+
+.neoloopy-kind-btn.is-active {
+  background: var(--nl-ink);
+  color: var(--nl-surface);
+}
+
+/* Color palette swatches (no-group + the eight curated hues). */
+.neoloopy-palette {
+  gap: 4px;
+  padding: 4px 6px;
+}
+
+/* Scoped under `.neoloopy-overlay` so the fill beats Obsidian's own
+   `.theme-light/​dark button { background-color }` (which otherwise whites-out
+   the swatch into a hollow ring). The hue tint is a fully-filled disc, like the
+   app — `--sw-l/-d` (fill) + `--bd-l/-d` (border) are set from JS per swatch. */
+.neoloopy-overlay .neoloopy-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--bd-l, var(--nl-line2));
+  background-color: var(--sw-l, transparent);
+  cursor: pointer;
+}
+
+.theme-dark .neoloopy-overlay .neoloopy-swatch {
+  border-color: var(--bd-d, var(--nl-line2));
+  background-color: var(--sw-d, transparent);
+}
+
+.neoloopy-overlay .neoloopy-swatch.is-active {
+  outline: 2px solid var(--nl-teal);
+  outline-offset: 1px;
+}
+
+.neoloopy-overlay .neoloopy-swatch-none {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nl-ink3);
+  background-color: transparent;
+  border-color: var(--nl-line2);
+}
+
+.neoloopy-swatch-none svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Segmented polarity pill: two halves, the active sign filled dark. */
+.neoloopy-seg {
+  padding: 2px;
+  gap: 0;
+}
+
+.neoloopy-overlay .neoloopy-seg-btn {
+  min-width: 32px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background-color: transparent;
+  color: var(--nl-graphite);
+  font: 800 16px var(--font-interface, sans-serif);
+  cursor: pointer;
+}
+
+.neoloopy-seg-btn.is-active {
+  background: var(--nl-ink);
+  color: var(--nl-surface);
+}
+
+/* Standalone circular flag buttons (delay · indirect · nonlinear · weight). */
+.neoloopy-overlay .neoloopy-circ {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--nl-surface);
+  color: var(--nl-graphite);
+  font: 700 15px var(--font-interface, sans-serif);
+  box-shadow: 0 3px 12px var(--nl-shadow);
+  cursor: pointer;
+}
+
+.neoloopy-circ.is-active {
+  background: var(--nl-teal);
+  color: #fff;
+}
+
+.neoloopy-weight-bar {
+  width: 14px;
+  height: var(--wt, 1px);
+  background: currentColor;
+  border-radius: 2px;
+}
+
+/* Loop note button — white squircle just right of the selected loop badge. */
+.neoloopy-overlay .neoloopy-badge-note {
+  position: absolute;
+  left: var(--nl-x, 0);
+  top: var(--nl-y, 0);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background-color: var(--nl-surface);
+  color: var(--nl-ink2);
+  box-shadow: 0 2px 8px var(--nl-shadow);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.neoloopy-badge-note.is-visible {
+  display: inline-flex;
+}
+
+.neoloopy-badge-note svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Trash FAB — white squircle, bottom-right. */
+.neoloopy-overlay .neoloopy-trash-fab {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 14px;
+  background-color: var(--nl-surface);
+  color: var(--nl-ink2);
+  box-shadow: 0 3px 12px var(--nl-shadow);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.neoloopy-trash-fab.is-visible {
+  display: inline-flex;
+}
+
+.neoloopy-trash-fab svg {
+  width: 20px;
+  height: 20px;
+}
+
+.neoloopy-trash-fab:hover {
+  color: var(--text-error);
+}
+
+/* ---- header-bar dialogs (glossary · keyboard shortcuts) ------------------
+   Standard Obsidian modals, so they use Obsidian's chrome vars (not the canvas
+   paper tokens) and read like the rest of the app's dialogs. */
+
+.neoloopy-glossary-search {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.neoloopy-glossary-list {
+  max-height: min(56vh, 460px);
+  overflow-y: auto;
+}
+
+.neoloopy-glossary-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.neoloopy-glossary-row:first-child {
+  border-top: none;
+}
+
+.neoloopy-glossary-term {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-normal);
+}
+
+.neoloopy-glossary-def {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.neoloopy-glossary-empty {
+  padding: 16px 0;
+  color: var(--text-muted);
+}
+
+.neoloopy-glossary-source {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.neoloopy-sc-group {
+  margin-top: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.neoloopy-sc-group:first-child {
+  margin-top: 0;
+}
+
+.neoloopy-sc-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.neoloopy-sc-keys {
+  flex: 0 0 auto;
+  width: 150px;
+}
+
+.neoloopy-sc-key {
+  display: inline-block;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  color: var(--text-normal);
+}
+
+.neoloopy-sc-desc {
+  flex: 1 1 auto;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---- ƒx equation modal --------------------------------------------------
+   The node-menu ƒx pill opens an engineless quantitative editor. The pill is a
+   circular flag button (like delay/indirect) carrying the math glyph; the modal
+   uses Obsidian's chrome vars so it reads like the glossary/shortcuts dialogs. */
+
+/* Generic hide utility — fxBtn (a .neoloopy-circ) and the live per-element hint
+   both toggle this when there is nothing to show. */
+.neoloopy-circ.is-hidden,
+.neoloopy-eq-perel.is-hidden {
+  display: none;
+}
+
+.neoloopy-circ.neoloopy-fx {
+  font: italic 700 16px var(--font-text, serif);
+}
+
+.neoloopy-eq-hint {
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.neoloopy-eq-label {
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.neoloopy-eq-input {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.neoloopy-eq-perel {
+  margin: -8px 0 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.neoloopy-eq-section {
+  margin-bottom: 14px;
+}
+
+.neoloopy-eq-section:empty {
+  margin-bottom: 0;
+}
+
+.neoloopy-eq-governing {
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--background-secondary);
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  color: var(--text-normal);
+}
+
+.neoloopy-eq-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.neoloopy-eq-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  font-size: 12px;
+  color: var(--text-normal);
+}
+
+.neoloopy-eq-chip.is-unknown {
+  border-color: var(--text-error);
+  color: var(--text-error);
+}
+
+.neoloopy-eq-warn {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-error);
+}
+
+.neoloopy-eq-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* ---- insight panel ------------------------------------------------------- */
+.neoloopy-canvas-split {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+.neoloopy-insight-panel {
+  display: none;
+  width: 300px;
+  flex: 0 0 300px;
+  overflow-y: auto;
+  padding: 12px 14px 24px;
+  border-left: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  font-size: 12px;
+}
+.neoloopy-insight-panel.is-open { display: block; }
+
+.neoloopy-ip-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.neoloopy-ip-title { font-weight: 600; color: var(--text-normal); font-size: 14px; }
+.neoloopy-ip-count { margin-left: auto; color: var(--text-faint); font-family: var(--font-monospace); font-size: 11px; }
+.neoloopy-ip-quant-pill {
+  padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 600;
+  color: var(--text-on-accent, #fff); background: #1f8f7a;
+}
+.neoloopy-ip-empty { color: var(--text-faint); padding: 12px 0; }
+
+.neoloopy-ip-section { margin-bottom: 16px; }
+.neoloopy-ip-label {
+  text-transform: uppercase; letter-spacing: 1px; font-size: 10px;
+  color: var(--text-faint); font-family: var(--font-monospace); margin-bottom: 6px;
+}
+.neoloopy-ip-stat { color: var(--text-muted); padding: 2px 0; }
+.neoloopy-ip-stat.is-muted { color: var(--text-faint); font-size: 11px; }
+
+.neoloopy-ip-loop {
+  display: flex; align-items: center; gap: 8px; padding: 6px 4px;
+  border-bottom: 1px solid var(--background-modifier-border); cursor: pointer;
+}
+.neoloopy-ip-loop.is-selected { background: var(--background-modifier-hover); }
+.neoloopy-ip-badge {
+  flex: 0 0 auto; min-width: 22px; text-align: center; border-radius: 6px;
+  font-weight: 700; font-size: 11px; padding: 1px 5px; color: #fff;
+}
+.neoloopy-ip-badge.is-r { background: #1f8f7a; }
+.neoloopy-ip-badge.is-b { background: #c98a1b; }
+.neoloopy-ip-loop-path { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.neoloopy-ip-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.neoloopy-ip-chip-label { color: var(--text-faint); font-size: 11px; width: 100%; }
+.neoloopy-ip-chip {
+  padding: 2px 8px; border-radius: 999px; font-size: 11px;
+  border: 1px solid var(--background-modifier-border); color: var(--text-muted);
+}
+.neoloopy-ip-ref-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.neoloopy-ip-spark { color: #c98a1b; flex: 0 0 auto; }
+.neoloopy-ip-spark polyline { stroke: currentColor; }
+.neoloopy-ip-ref-text { display: flex; flex-direction: column; overflow: hidden; }
+.neoloopy-ip-ref-var { color: var(--text-normal); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.neoloopy-ip-ref-note { color: var(--text-faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Insight panel — System card + Parents section (orientation layer). */
+.neoloopy-ip-system {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+}
+.neoloopy-ip-system-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.neoloopy-ip-system-open {
+  display: inline-flex;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.neoloopy-ip-system-open:hover {
+  color: var(--text-normal);
+}
+.neoloopy-ip-parent {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+.neoloopy-ip-parent-icon {
+  display: inline-flex;
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+.neoloopy-ip-parent-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.neoloopy-ip-parent-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-normal);
+}
+.neoloopy-ip-parent-via {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}

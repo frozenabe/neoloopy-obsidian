@@ -1,0 +1,32 @@
+{
+  "name": "neoloopy-obsidian",
+  "version": "0.1.0",
+  "description": "neoloopy Obsidian plugin — local-first causal-loop diagrams",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "typecheck": "tsc -noEmit -skipLibCheck",
+    "test": "vitest run",
+    "smoke": "npm run build && node test/smoke/smoke.cjs && node test/smoke/view-smoke.cjs"
+  },
+  "keywords": [
+    "obsidian",
+    "systems-thinking",
+    "causal-loop-diagram",
+    "cld",
+    "feedback-loops"
+  ],
+  "author": "neoloopy",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.28.1",
+    "obsidian": "^1.4.11",
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.9",
+    "yaml": "^2.4.5"
+  }
+}
