@@ -1,5 +1,7 @@
 # neoloopy for Obsidian
 
+**Home:** [neoloopy.com](https://neoloopy.com) · local-first systems-thinking for Obsidian.
+
 Build **causal-loop diagrams (CLDs)** for systems thinking directly in your
 vault. Variables are Markdown notes, links are causal arrows with polarity, and
 neoloopy finds the **reinforcing (R)** and **balancing (B)** feedback loops in
