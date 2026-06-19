@@ -21,6 +21,10 @@ export function loopKey(labels: string[], type: string): string {
  * leading `scheme:` so Obsidian's property view does not show it as a (dead)
  * external link. Display only; NEVER an identity/lookup/export/API key (that is
  * `loopKey`). Mirrors Dart `fmt.loopEchoLabel`.
+ *
+ * The Set dedupe absorbs a closed-cycle duplicate, so no explicit `first==last`
+ * trim is needed. Keep this symmetric with the Dart twin: do not add a trim to
+ * only one side — divergent membership handling would break byte parity.
  */
 export function loopEchoLabel(labels: string[], type: string): string {
   const letter = type.toUpperCase().startsWith("R") ? "R" : "B";
