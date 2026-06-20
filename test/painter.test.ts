@@ -10,8 +10,9 @@ import { emptyVariable, VariableFile } from "../src/engine/types";
  * argument is captured. `measureText` returns a width proportional to the string
  * length so `fitText` truncates predictably (a wide box avoids truncation here).
  */
-function recordingCtx(): { ctx: CanvasRenderingContext2D; texts: string[] } {
+function recordingCtx(): { ctx: CanvasRenderingContext2D; texts: string[]; calls: string[] } {
   const texts: string[] = [];
+  const calls: string[] = [];
   const store: Record<string, unknown> = {};
   const ctx = new Proxy(store, {
     get(target, prop) {
@@ -22,6 +23,7 @@ function recordingCtx(): { ctx: CanvasRenderingContext2D; texts: string[] } {
         return target[prop as string];
       }
       return (...args: unknown[]) => {
+        calls.push(prop as string);
         if (prop === "fillText" || prop === "strokeText") texts.push(String(args[0]));
       };
     },
@@ -30,8 +32,10 @@ function recordingCtx(): { ctx: CanvasRenderingContext2D; texts: string[] } {
       return true;
     },
   });
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, texts };
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, texts, calls };
 }
+
+const strokeCount = (calls: string[]): number => calls.filter((c) => c === "stroke").length;
 
 function sceneWith(node: VariableFile, w = 160): Scene {
   const box: NodeBox = { id: node.id, cx: 100, cy: 100, w, h: 40, type: node.type };
@@ -76,5 +80,29 @@ describe("painter — node labels", () => {
     const { ctx, texts } = recordingCtx();
     paint(ctx, sceneWith(node), new Camera(), LIGHT, ui);
     expect(texts).toEqual(["Population"]);
+  });
+});
+
+describe("painter — subsystem mark", () => {
+  // Mirrors `_paintSubsystemMark` in app/lib/painters/graph_painter.dart: a node
+  // with a `subsystem` link gets a top-left "layers" glyph (a rhombus + a chevron,
+  // two extra strokes). Asserted as a differential so it stays coordinate-free.
+  const plain = (): VariableFile => emptyVariable("x", "Plain");
+  const linked = (): VariableFile => ({ ...emptyVariable("x", "Plain"), subsystem: "[[../Child/System|Child]]" });
+
+  it("draws the layers glyph (two extra strokes) when a subsystem is connected", () => {
+    const a = recordingCtx();
+    paint(a.ctx, sceneWith(plain()), new Camera(), LIGHT, ui);
+    const b = recordingCtx();
+    paint(b.ctx, sceneWith(linked()), new Camera(), LIGHT, ui);
+    expect(strokeCount(b.calls) - strokeCount(a.calls)).toBe(2);
+  });
+
+  it("draws no mark for an empty subsystem string", () => {
+    const a = recordingCtx();
+    paint(a.ctx, sceneWith(plain()), new Camera(), LIGHT, ui);
+    const b = recordingCtx();
+    paint(b.ctx, sceneWith({ ...emptyVariable("x", "Plain"), subsystem: "" }), new Camera(), LIGHT, ui);
+    expect(strokeCount(b.calls)).toBe(strokeCount(a.calls));
   });
 });

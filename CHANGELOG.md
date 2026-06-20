@@ -5,6 +5,29 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-06-20
+
+### Added
+
+- **Mobile (iOS) support.** The plugin is no longer desktop-only
+  (`isDesktopOnly: false`), and the canvas is finally usable by touch.
+  Double-tapping empty space creates a node right where you tapped with an
+  inline name field; the canvas pins itself to the band above the soft keyboard
+  and pans the new node into view so it never hides behind the keyboard (a port
+  of the companion app's keyboard avoidance). Tapping away with an empty name
+  discards the node, a named node is kept, and Escape cancels.
+- **Subsystem marker on the canvas.** A node linked to a child model now shows a
+  small stacked-sheets glyph in its top-left corner, matching the companion app,
+  so drill-in nodes are recognizable at a glance.
+
+### Fixed
+
+- The canvas no longer collapses to zero height when the iOS soft keyboard
+  opens — the bug that made a freshly created node appear for a moment and then
+  vanish.
+- The inline rename field is now compact and centered on its node instead of
+  being stretched to full width by Obsidian's mobile input styling.
+
 ## [0.1.6] - 2026-06-19
 
 ### Added
@@ -92,6 +115,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   annotate them, and export to JSON / Markdown / Mermaid — fully local and
   offline.
 
+[0.1.7]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.7
 [0.1.6]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.6
 [0.1.5]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.5
 [0.1.4]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.4

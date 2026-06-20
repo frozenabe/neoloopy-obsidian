@@ -21,9 +21,11 @@ export interface Bounds {
 
 export const MIN_SCALE = 0.08;
 export const MAX_SCALE = 3.0;
+/** Zoom a fresh model opens at when there's nothing to fit (no nodes yet). */
+export const DEFAULT_SCALE = 1.2;
 
 export class Camera {
-  scale = 1.2;
+  scale = DEFAULT_SCALE;
   tx = 40;
   ty = 120;
 
@@ -61,8 +63,12 @@ export class Camera {
   fit(bounds: Bounds, vw: number, vh: number, pad = 120): void {
     const w = Math.max(1, bounds.maxX - bounds.minX);
     const h = Math.max(1, bounds.maxY - bounds.minY);
-    const sx = (vw - pad * 2) / w;
-    const sy = (vh - pad * 2) / h;
+    // Cap padding to a fraction of the viewport so a fixed margin can't exceed a
+    // small (mobile) viewport — a 120px pad on a ~390px phone would leave a
+    // negative content box and pin the camera at MIN_SCALE (nodes invisibly tiny).
+    const p = Math.min(pad, vw * 0.15, vh * 0.15);
+    const sx = (vw - p * 2) / w;
+    const sy = (vh - p * 2) / h;
     this.scale = clamp(Math.min(sx, sy), MIN_SCALE, MAX_SCALE);
     const cx = (bounds.minX + bounds.maxX) / 2;
     const cy = (bounds.minY + bounds.maxY) / 2;
@@ -74,6 +80,14 @@ export class Camera {
   centerOn(wx: number, wy: number, vw: number, vh: number): void {
     this.tx = vw / 2 - wx * this.scale;
     this.ty = vh / 2 - wy * this.scale;
+  }
+
+  /** Restore the default zoom and center world origin in a vw×vh viewport. Used
+   *  when opening a model with no saved viewport so an empty model can't inherit
+   *  the previous view's scale (which could be tiny → first node invisibly small). */
+  reset(vw: number, vh: number): void {
+    this.scale = DEFAULT_SCALE;
+    this.centerOn(0, 0, vw, vh);
   }
 }
 

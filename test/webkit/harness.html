@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>neoloopy iOS canvas harness</title>
+<link rel="stylesheet" href="/styles.css" />
+<style>
+  /* Give the mounted view a real viewport-sized box (Obsidian normally does). */
+  html, body { margin: 0; height: 100%; background: #1e1e1e; }
+  #mount, .workspace-leaf-content, .view-content { height: 100%; }
+  .neoloopy-canvas-root { display: flex; flex-direction: column; height: 100%; }
+  .neoloopy-canvas-split { display: flex; flex: 1; min-height: 0; }
+  .view-header { display: none; }
+</style>
+</head>
+<body>
+<div id="mount"></div>
+
+<!-- 1. Obsidian shim + DOM helpers + in-memory vault (sets window.__OBSIDIAN__, __makeApp) -->
+<script src="/test/webkit/.shim.bundle.js"></script>
+
+<!-- 2. CommonJS glue so the CJS main.js bundle resolves require/module/exports -->
+<script>
+  window.module = { exports: {} };
+  window.exports = window.module.exports;
+  window.require = function (m) { return m === "obsidian" ? window.__OBSIDIAN__ : {}; };
+  window.process = window.process || { env: {}, platform: "browser", cwd: function () { return "/"; } };
+  window.global = window;
+</script>
+
+<!-- 3. The SHIPPED plugin bundle -->
+<script src="/main.js"></script>
+
+<!-- 4. Boot: seed a model, mount the real CanvasView, expose a drive API -->
+<script>
+(async function boot() {
+  const status = { ready: false, error: null };
+  window.__nl = { status };
+  try {
+    const obsidian = window.__OBSIDIAN__;
+    const app = window.__makeApp();
+    const PluginClass = window.module.exports.default || window.module.exports;
+
+    const plugin = new PluginClass(app, { id: "neoloopy", version: "0.0.0-harness" });
+    await plugin.onload();
+
+    // Seed the same demo model the smoke tests use (R1 reinforcing + B1 balancing).
+    const ref = await plugin.engine.createModel("iOS Harness");
+    await plugin.engine.buildModel(ref.folder, {
+      variables: [
+        { label: "Coffee intake", type: "stock" },
+        { label: "Alertness", type: "auxiliary" },
+        { label: "Productivity", type: "auxiliary" },
+        { label: "Fatigue", type: "stock" },
+      ],
+      links: [
+        { from: "Coffee intake", to: "Alertness", polarity: "+" },
+        { from: "Alertness", to: "Productivity", polarity: "+" },
+        { from: "Productivity", to: "Coffee intake", polarity: "+" },
+        { from: "Coffee intake", to: "Fatigue", polarity: "+" },
+        { from: "Fatigue", to: "Alertness", polarity: "-" },
+      ],
+    });
+
+    const factory = plugin._views["neoloopy-canvas"];
+    const leaf = new obsidian.WorkspaceLeaf(app);
+    const view = factory(leaf);
+    leaf.view = view;
+    app.workspace.__setActive(view);
+    await view.onOpen();
+    if (!view.currentFolder()) await view.openModel(ref.folder);
+
+    const canvas = () => view.contentEl.querySelector("canvas.neoloopy-canvas");
+
+    Object.assign(window.__nl, {
+      app, plugin, view, ref,
+      folder: () => view.currentFolder(),
+      nodeCount: () => (view.graph ? view.graph.nodes.length : 0),
+      nodeLabels: () => (view.graph ? view.graph.nodes.map((n) => n.label) : []),
+      hasRenameInput: () => !!view.renameInput,
+      renameValue: () => (view.renameInput ? view.renameInput.value : null),
+      isRenameFocused: () => !!view.renameInput && document.activeElement === view.renameInput,
+      // Models the iOS quirk: the soft-keyboard / focus handoff blurs the input.
+      blurRename: () => { if (view.renameInput) view.renameInput.blur(); },
+      typeRename: (s) => { if (view.renameInput) { view.renameInput.value = s; } },
+      escapeRename: () => { if (view.renameInput) view.renameInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); },
+      addVariableCommand: async () => { await view.cmdAddVariable(); },
+      canvasRect: () => { const c = canvas(); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; },
+      cameraScale: () => view.camera.scale,
+      canvasWidth: () => { const c = canvas(); return c ? c.clientWidth : 0; },
+      panelOpen: () => view.insightPanel.classList.contains("is-open"),
+      setCameraScale: (s) => { view.camera.scale = s; },
+      openEmptyModel: async () => { const r = await plugin.engine.createModel("Empty " + Date.now()); await view.openModel(r.folder); return r.folder; },
+      // The iOS soft keyboard / layout shifts fire the ResizeObserver → resize().
+      forceResize: () => view.resize(),
+      // While inline-editing on mobile the wrap is pinned to the keyboard band
+      // (a CSS class sets position:fixed), so read the computed position.
+      wrapPosition: () => getComputedStyle(view.wrapper).position,
+      // Mobile naming goes through a modal prompt (.neoloopy-prompt-input).
+      promptOpen: () => !!document.querySelector(".neoloopy-prompt-input"),
+      fillPrompt: (text) => { const i = document.querySelector(".neoloopy-prompt-input"); if (i) i.value = text; },
+      commitPrompt: () => { const i = document.querySelector(".neoloopy-prompt-input"); if (i) i.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); },
+      cancelPrompt: () => { const i = document.querySelector(".neoloopy-prompt-input"); if (i) i.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); },
+      // Canvas-local point farthest from every node box (reliably empty space).
+      findEmptyPoint: () => {
+        const c = canvas(); const r = c.getBoundingClientRect();
+        const cam = view.camera;
+        const screens = (view.scene ? [...view.scene.boxes.values()] : []).map((b) => cam.toScreen(b.cx, b.cy));
+        let best = { x: r.width * 0.12, y: r.height * 0.15 }, bestD = -1;
+        for (let gx = 0.08; gx <= 0.92; gx += 0.08) for (let gy = 0.08; gy <= 0.92; gy += 0.08) {
+          const x = gx * r.width, y = gy * r.height;
+          let d = Infinity; for (const s of screens) d = Math.min(d, Math.hypot(x - s.x, y - s.y));
+          if (d > bestD) { bestD = d; best = { x, y }; }
+        }
+        return best;
+      },
+      // Drive a double-tap purely through the bundle's pointer state machine.
+      dispatchDoubleTap: (cx, cy) => {
+        const c = canvas();
+        const r = c.getBoundingClientRect();
+        const x = r.x + (cx == null ? r.width / 2 : cx);
+        const y = r.y + (cy == null ? r.height / 2 : cy);
+        let id = 1;
+        const send = (type, when) => {
+          const ev = new PointerEvent(type, {
+            pointerId: id, pointerType: "touch", isPrimary: true,
+            clientX: x, clientY: y, bubbles: true, cancelable: true,
+          });
+          // jsdom/WebKit synthetic events carry timeStamp; the tap detector uses it.
+          c.dispatchEvent(ev);
+        };
+        // setPointerCapture would throw on a synthetic pointerId — neutralize it.
+        const origCap = c.setPointerCapture, origHas = c.hasPointerCapture, origRel = c.releasePointerCapture;
+        c.setPointerCapture = () => {}; c.hasPointerCapture = () => false; c.releasePointerCapture = () => {};
+        try {
+          send("pointerdown"); send("pointerup"); id++;
+          send("pointerdown"); send("pointerup");
+        } finally {
+          c.setPointerCapture = origCap; c.hasPointerCapture = origHas; c.releasePointerCapture = origRel;
+        }
+      },
+    });
+
+    // ---- on-screen event log (real-device diagnosis; no devtools needed) ----
+    const logEl = document.createElement("pre");
+    logEl.style.cssText =
+      "position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;margin:0;" +
+      "padding:6px;font:11px/1.3 monospace;color:#5f5;background:rgba(0,0,0,.85);" +
+      "z-index:99999;white-space:pre-wrap";
+    document.body.appendChild(logEl);
+    const t0 = Date.now();
+    const cnt = () => (view.graph ? view.graph.nodes.length : 0);
+    const nllog = (m) => {
+      logEl.textContent = `+${String(Date.now() - t0).padStart(5)}ms n=${cnt()}  ${m}\n` + logEl.textContent;
+    };
+    window.__nl.log = nllog;
+    const fmt = (n) => (n != null ? Number(n).toFixed(3) : "?");
+    const cw = () => { const c = canvas(); return c ? c.clientWidth : "?"; };
+    const pOpen = () => view.insightPanel.classList.contains("is-open");
+    nllog(`READY scale=${fmt(view.camera.scale)} canvasW=${cw()} panelOpen=${pOpen()} win=${innerWidth}x${innerHeight} dpr=${window.devicePixelRatio}`);
+
+    // Wrap the suspect methods (instance props shadow the prototype) to trace them.
+    const rm = view.model.removeVariable.bind(view.model);
+    view.model.removeVariable = (folder, id) => { nllog(`removeVariable ${id}`); return rm(folder, id); };
+    const end = view.endRename.bind(view);
+    view.endRename = (id, value, prev) => { nllog(`endRename value=${JSON.stringify(value)} prev=${JSON.stringify(prev)}`); return end(id, value, prev); };
+    const reload = view.reloadGraph.bind(view);
+    view.reloadGraph = async () => { const r = await reload(); nllog(`reloadGraph -> n=${cnt()}`); return r; };
+    const create = view.createNodeAt.bind(view);
+    view.createNodeAt = async (w) => {
+      nllog(`createNodeAt world=(${w.x | 0},${w.y | 0}) scale=${fmt(view.camera.scale)}`);
+      const r = await create(w);
+      const b = boxInfo(view.selNode), s = view.camera.scale;
+      nllog(`created sel=${view.selNode} box=${JSON.stringify(b)} screenW=${b ? Math.round(b.w * s) : "?"}px scale=${fmt(s)}`);
+      return r;
+    };
+    function boxInfo(id) { const b = view.scene && view.scene.boxes.get(id); return b ? { w: Math.round(b.w), h: Math.round(b.h) } : null; }
+
+    document.addEventListener("focusin", (e) => nllog(`focusin .${e.target && e.target.className}`), true);
+    document.addEventListener("focusout", (e) => nllog(`focusout .${e.target && e.target.className}`), true);
+    window.addEventListener("error", (e) => nllog(`ERROR ${e.message}`));
+    let last = cnt();
+    setInterval(() => { const c = cnt(); if (c !== last) { nllog(`*** nodes ${last} -> ${c} ***`); last = c; } }, 120);
+
+    status.ready = true;
+  } catch (e) {
+    status.error = (e && e.stack) || String(e);
+    /* eslint-disable-next-line no-console */
+    console.error("[harness boot error]", status.error);
+  }
+})();
+</script>
+</body>
+</html>

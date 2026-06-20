@@ -6,6 +6,13 @@
 .neoloopy-canvas-root {
   display: flex;
   flex-direction: column;
+  /* Anchor the flex chain (root → split → wrap → canvas) to the view's full
+     height. Without this the canvas height resolves only because Obsidian's
+     container happens to have one; on iOS, when the soft keyboard reflows the
+     mobile view that height drops out and the canvas collapses to 0px tall —
+     the diagram (and a just-created node) vanishes until the keyboard closes. */
+  height: 100%;
+  min-height: 0;
 }
 
 .neoloopy-toolbar {
@@ -44,6 +51,18 @@
   overflow: hidden;
 }
 
+/* While inline-editing on mobile, pin the canvas wrap to the visible band above
+   the soft keyboard (window.visualViewport) so the flex layout can't collapse it
+   to zero height. --nl-kb-top/height carry the live band geometry. */
+.neoloopy-canvas-wrap.neoloopy-kb-band {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--nl-kb-top, 0px);
+  height: var(--nl-kb-height, 100%);
+  z-index: 30;
+}
+
 .neoloopy-canvas {
   width: 100%;
   height: 100%;
@@ -71,9 +90,15 @@
 
 .neoloopy-rename-input {
   position: absolute;
+  /* --nl-rename-left/top are the node-centre screen point; translate(-50%,-50%)
+     centres the field exactly on it (no per-size offset to hand-tune). */
   left: var(--nl-rename-left, 0);
   top: var(--nl-rename-top, 0);
-  width: 140px;
+  transform: translate(-50%, -50%);
+  /* !important + box-sizing: Obsidian's mobile CSS stretches inputs to full
+     width; keep this compact field pinned to 140px. */
+  width: 140px !important;
+  box-sizing: border-box;
   font: 600 13px var(--font-interface, sans-serif);
   text-align: center;
   border-radius: 8px;
@@ -558,7 +583,7 @@
   margin-top: 18px;
 }
 
-/* ---- title prompt (new / rename model) ----------------------------------- */
+/* ---- title prompt (new model / rename model / name variable) ------------- */
 .neoloopy-prompt-input {
   width: 100%;
 }
@@ -568,6 +593,36 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 18px;
+}
+
+/* The prompt already has labeled OK/Cancel buttons, so hide Obsidian's redundant
+   corner ✕ (a second cancel affordance) on this modal. */
+.neoloopy-prompt-modal .modal-close-button {
+  display: none;
+}
+
+/* On a phone, Obsidian slides modals up from the bottom — straight into the soft
+   keyboard, which then hides the OK/Cancel row (the dialog looks stuck). Pin the
+   naming prompt to the TOP and keep it compact so its input AND buttons stay
+   visible above the keyboard. `.modal.neoloopy-prompt-modal` outspecifies the
+   default mobile modal rules without !important. */
+@media (max-width: 600px) {
+  .modal.neoloopy-prompt-modal {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    bottom: auto;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(94vw, 460px);
+    max-width: 94vw;
+    max-height: none;
+    margin: 0;
+    border-radius: 12px;
+  }
+  .neoloopy-prompt-actions {
+    margin-top: 12px;
+  }
 }
 
 /* ---- insight panel ------------------------------------------------------- */
@@ -589,6 +644,21 @@
   font-size: 12px;
 }
 .neoloopy-insight-panel.is-open { display: block; }
+
+/* Mobile / narrow panes: overlay the insight panel on top of the canvas instead
+   of stealing a fixed 300px of flex width. On a phone that fixed width crushes
+   the canvas, forcing the camera to its minimum zoom (nodes render invisibly
+   tiny). As an overlay the canvas keeps full width and a usable fit. */
+@media (max-width: 600px) {
+  .neoloopy-canvas-split { position: relative; }
+  .neoloopy-insight-panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(300px, 85vw);
+    z-index: 20;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.35);
+  }
+}
 
 .neoloopy-ip-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .neoloopy-ip-title { font-weight: 600; color: var(--text-normal); font-size: 14px; }
