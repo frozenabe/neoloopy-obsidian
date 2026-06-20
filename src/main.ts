@@ -30,6 +30,16 @@ export default class NeoloopyPlugin extends Plugin {
     this.rebuildEngine();
     this.addSettingTab(new NeoloopySettingTab(this.app, this));
 
+    // Silent heal-on-scan: a raw Obsidian copy of a model (or a folder of
+    // models) clones their ids verbatim; re-key the newer duplicates so every
+    // model id stays unique. Deferred to layout-ready so plugin load isn't
+    // blocked, and best-effort so a partial vault never breaks startup.
+    this.app.workspace.onLayoutReady(() => {
+      void this.engine.healDuplicateIds().catch(() => {
+        /* best-effort */
+      });
+    });
+
     this.registerView(VIEW_TYPE_CANVAS, (leaf) => new CanvasView(leaf, this));
 
     this.addRibbonIcon("git-fork", "Open neoloopy canvas", () => {
@@ -67,6 +77,7 @@ export default class NeoloopyPlugin extends Plugin {
     };
 
     onCanvas("rename-model", "Rename model", (v) => void v.cmdRenameModel());
+    onCanvas("duplicate-model", "Duplicate model (fresh IDs)", (v) => void v.cmdDuplicateModel());
     onCanvas("add-variable", "Add variable", (v) => void v.cmdAddVariable());
     onCanvas("tidy-layout", "Tidy layout", (v) => void v.cmdTidy());
     onCanvas("detect-loops", "Detect feedback loops", (v) => v.reportLoops());

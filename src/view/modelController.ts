@@ -42,6 +42,10 @@ export class ModelController {
     return this.guarded(() => this.engine.renameModel(folder, name));
   }
 
+  duplicateModel(srcFolder: string): Promise<ModelRef> {
+    return this.guarded(() => this.engine.duplicateModel(srcFolder));
+  }
+
   retitleModel(folder: string, name: string): Promise<ModelRef> {
     return this.guarded(() => this.engine.retitleModel(folder, name));
   }

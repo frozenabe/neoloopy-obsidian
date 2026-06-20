@@ -297,6 +297,10 @@ export class CanvasView extends ItemView {
     await this.renameModel();
   }
 
+  async cmdDuplicateModel(): Promise<void> {
+    await this.duplicateCurrentModel();
+  }
+
   async cmdAddVariable(): Promise<void> {
     await this.addVariableAtCenter();
   }
@@ -471,6 +475,22 @@ export class CanvasView extends ItemView {
       new Notice(`Renamed to "${ref.name}"`);
     } catch (e) {
       new Notice(`Couldn't rename model: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  private async duplicateCurrentModel(): Promise<void> {
+    const folder = this.folder;
+    if (!folder) {
+      new Notice("Open or create a model first.");
+      return;
+    }
+    try {
+      const ref = await this.model.duplicateModel(folder);
+      await this.toolbar.refreshModelList();
+      await this.openModel(ref.folder);
+      new Notice(`Duplicated as "${ref.name}"`);
+    } catch (e) {
+      new Notice(`Couldn't duplicate model: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

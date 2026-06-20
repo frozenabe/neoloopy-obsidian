@@ -44,7 +44,7 @@ import {
   normalizeConfidence,
 } from "./types";
 import { LoopGraph, labelLoopsByKey } from "./loopGraph";
-import { YamlParse, parseNote, serializeNote } from "./noteCodec";
+import { YamlParse, parseNote, serializeNote, splitFrontmatter } from "./noteCodec";
 import { noteSlug, noteUnslug } from "./noteNaming";
 import {
   LoopNote,
@@ -266,6 +266,79 @@ export class NativeEngine implements NeoloopyEngine {
   /** Resolve a folder to its model id (read from `model.json`). */
   async modelId(folder: string): Promise<string> {
     return (await this.readManifest(folder)).id;
+  }
+
+  /**
+   * Duplicate a model as a brand-new model: a byte-for-byte copy of the folder
+   * tree (so prose, layout, loop notes, and System note all come along), then a
+   * full re-key so the copy has a fresh model id, fresh variable ids, and fresh
+   * loop/System identity anchors. `shared` keys are PRESERVED, so the copy stays
+   * joined to the cross-model graph. Lands as a sibling of the source, titled
+   * "<name> (copy)" (bumping to "(copy 2)…" on a name clash).
+   */
+  async duplicateModel(srcFolder: string): Promise<ModelRef> {
+    const manifest = await this.readManifest(srcFolder);
+    const copyName = await this.uniqueModelName(manifest.name);
+    const dest = await this.uniqueSiblingFolder(
+      parentPath(srcFolder),
+      slug(copyName) || "model",
+    );
+    await this.copyTree(srcFolder, dest);
+    const newId = await this.rekeyModel(dest);
+    // rekeyModel stamped the fresh id + modified; set the copy's title in place
+    // (the folder is already named from copyName's slug — don't re-slug/move).
+    const copied = await this.readManifest(dest);
+    await this.writeManifest(dest, { ...copied, name: copyName });
+    return {
+      id: newId,
+      name: copyName,
+      folder: dest,
+      group: copied.folder ?? null,
+      modified: copied.modified,
+      variableCount: (await this.listNoteFiles(dest)).length,
+      quant: manifestIsQuant(copied),
+    };
+  }
+
+  /**
+   * Heal model-id collisions: a raw Obsidian copy of a model (or a folder of
+   * models) clones their ids verbatim, so two folders end up claiming the same
+   * `mdl_…`. Group folders by id; for each colliding group keep the OLDEST (by
+   * `created`) and re-key every newer sibling. Returns one row per re-keyed
+   * folder. A no-op (empty result) when every id is already unique.
+   */
+  async healDuplicateIds(): Promise<
+    Array<{ folder: string; oldId: string; newId: string }>
+  > {
+    const models = await this.listModels();
+    const byId = new Map<string, ModelRef[]>();
+    for (const m of models) {
+      const arr = byId.get(m.id);
+      if (arr) arr.push(m);
+      else byId.set(m.id, [m]);
+    }
+    const changed: Array<{ folder: string; oldId: string; newId: string }> = [];
+    for (const [id, group] of byId) {
+      if (group.length < 2) continue;
+      // Oldest model keeps the id; tie-break on folder path so the choice is
+      // deterministic (and stable across heal passes).
+      const ranked = await Promise.all(
+        group.map(async (m) => ({
+          m,
+          created: (await this.readManifest(m.folder)).created,
+        })),
+      );
+      ranked.sort((a, b) =>
+        a.created !== b.created
+          ? a.created.localeCompare(b.created)
+          : a.m.folder.localeCompare(b.m.folder),
+      );
+      for (const { m } of ranked.slice(1)) {
+        const newId = await this.rekeyModel(m.folder);
+        changed.push({ folder: m.folder, oldId: id, newId });
+      }
+    }
+    return changed;
   }
 
   // ---- variables -----------------------------------------------------------
@@ -935,9 +1008,136 @@ export class NativeEngine implements NeoloopyEngine {
     await visit("", 0);
     return out;
   }
+
+  // ---- duplicate / re-key internals ----------------------------------------
+
+  /**
+   * Re-key a model in place: assign a fresh model id, fresh variable ids, and
+   * re-point every internal reference (links, loop-note members, the System
+   * note's identity anchor). Structure, prose, layout, `shared` keys, and
+   * subsystem wikilinks are untouched. Returns the new model id. Used by both
+   * {@link duplicateModel} (on a fresh copy) and {@link healDuplicateIds} (on a
+   * collided clone).
+   */
+  private async rekeyModel(folder: string): Promise<string> {
+    const manifest = await this.readManifest(folder);
+    const notes = await this.loadNotes(folder);
+    const idMap = new Map<string, string>();
+    for (const v of notes) idMap.set(v.id, genVarId());
+    const newModelId = genModelId();
+
+    // Notes are filename-by-label, so a naive per-note rewrite would collide the
+    // new files against the still-present old ones (same label → same stem →
+    // `-2` phantom duplicates). Clear them all first, then write each remapped
+    // note into an empty `Nodes/`.
+    await this.removeAllVariableFiles(folder);
+    for (const v of notes) {
+      await this.writeNote(folder, undefined, remapVariableIds(v, idMap));
+    }
+
+    // Re-point each loop note's members (its stable identity) to the new ids.
+    for (const filename of await this.listLoopNoteFiles(folder)) {
+      const raw = await this.readLoopNoteFile(folder, filename);
+      if (raw === null) continue;
+      const note = parseLoopNote(raw, this.yaml);
+      const members = canonicalLoopMembers(
+        note.members.map((m) => idMap.get(m) ?? m),
+      );
+      await this.writeLoopNoteFile(
+        folder,
+        filename,
+        serializeLoopNote({ ...note, members }),
+      );
+    }
+
+    await this.swapSystemModelId(folder, newModelId);
+    await this.writeManifest(folder, {
+      ...manifest,
+      id: newModelId,
+      modified: new Date().toISOString(),
+    });
+    return newModelId;
+  }
+
+  /** Recursively copy a folder tree byte-for-byte (the source is untouched). */
+  private async copyTree(src: string, dst: string): Promise<void> {
+    await this.storage.mkdirs(dst);
+    const listing = await this.storage.list(src);
+    for (const f of listing.files) {
+      await this.storage.write(joinPath(dst, baseName(f)), await this.storage.read(f));
+    }
+    for (const sub of listing.folders) {
+      await this.copyTree(sub, joinPath(dst, baseName(sub)));
+    }
+  }
+
+  /** Remove every variable note (flat root + `Nodes/`); keep the special notes. */
+  private async removeAllVariableFiles(folder: string): Promise<void> {
+    const root = (await this.storage.list(folder)).files.filter(
+      (f) => baseName(f).endsWith(".md") && !SPECIAL_NOTES.has(baseName(f)),
+    );
+    for (const f of root) await this.storage.remove(f);
+    try {
+      const nodes = (await this.storage.list(this.nodesDir(folder))).files.filter(
+        (f) => baseName(f).endsWith(".md"),
+      );
+      for (const f of nodes) await this.storage.remove(f);
+    } catch {
+      // No `Nodes/` subfolder — flat-only (legacy) layout.
+    }
+  }
+
+  /** Rewrite `System.md`'s `model:` identity anchor to `newId` (if it exists). */
+  private async swapSystemModelId(folder: string, newId: string): Promise<void> {
+    const path = joinPath(folder, "System.md");
+    if (!(await this.storage.exists(path))) return;
+    const [fm, body] = splitFrontmatter(await this.storage.read(path));
+    if (fm === null) return; // no frontmatter to anchor — leave as-is
+    const line = `model: ${JSON.stringify(newId)}`;
+    const nextFm = /^\s*model:\s*.*$/m.test(fm)
+      ? fm.replace(/^\s*model:\s*.*$/m, line)
+      : `${line}\n${fm}`;
+    let out = `---\n${nextFm}${nextFm.endsWith("\n") ? "" : "\n"}---\n`;
+    if (body.trim().length > 0) out += `\n${body.trim()}\n`;
+    await this.storage.write(path, out);
+  }
+
+  /** "<base> (copy)" — bumping "(copy 2)…" against existing model titles. */
+  private async uniqueModelName(base: string): Promise<string> {
+    const taken = new Set(
+      (await this.listModels()).map((m) => m.name.toLowerCase()),
+    );
+    let candidate = `${base} (copy)`;
+    let n = 2;
+    while (taken.has(candidate.toLowerCase())) candidate = `${base} (copy ${n++})`;
+    return candidate;
+  }
+
+  /** A free folder `<parent>/<leaf>` (suffixing `-2/-3…` like createModel). */
+  private async uniqueSiblingFolder(parent: string, leaf: string): Promise<string> {
+    let folder = joinPath(parent, leaf);
+    let n = 2;
+    while (await this.storage.exists(folder)) {
+      folder = joinPath(parent, `${leaf}-${n}`);
+      n++;
+    }
+    return folder;
+  }
 }
 
 // ---- pure helpers ----------------------------------------------------------
+
+/** A copy of `v` with its id and every link target re-pointed through `idMap`. */
+function remapVariableIds(
+  v: VariableFile,
+  idMap: Map<string, string>,
+): VariableFile {
+  return {
+    ...v,
+    id: idMap.get(v.id) ?? v.id,
+    links: v.links.map((l) => ({ ...l, to: idMap.get(l.to) ?? l.to })),
+  };
+}
 
 function makeLink(to: string, init: LinkInit): VaultLink {
   return {

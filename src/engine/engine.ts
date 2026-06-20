@@ -143,6 +143,19 @@ export interface NeoloopyEngine {
    */
   relabelNodeFromFilename(folder: string, fileStem: string): Promise<void>;
   deleteModel(folder: string): Promise<void>;
+  /**
+   * Duplicate a model as a NEW model with fresh ids (model + every variable,
+   * plus re-pointed loop-note members and System anchor). `shared` keys are
+   * preserved so the copy stays in the cross-model graph. Lands as a sibling of
+   * the source, titled "<name> (copy)". Returns the copy's ref.
+   */
+  duplicateModel(srcFolder: string): Promise<ModelRef>;
+  /**
+   * Re-key models that share an id (a raw Obsidian copy clones ids verbatim):
+   * keep the oldest, re-key every newer sibling. Returns one row per re-keyed
+   * folder; empty when all ids are already unique.
+   */
+  healDuplicateIds(): Promise<Array<{ folder: string; oldId: string; newId: string }>>;
   loadGraph(folder: string): Promise<GraphView>;
 
   addVariable(folder: string, init: NewVariable): Promise<VariableFile>;
