@@ -14,9 +14,7 @@
 
 import { App } from "obsidian";
 import { ShortcutsModal } from "./dialogs";
-import { GraphView } from "../engine/engine";
-import { Camera, Point } from "./camera";
-import { Scene } from "./painter";
+import { Camera, GraphView, Point, Scene } from "@neoloopy/cld-canvas";
 import { routeKey, stepId } from "./keyRouting";
 
 /** What the keyboard controller needs from the canvas view. */

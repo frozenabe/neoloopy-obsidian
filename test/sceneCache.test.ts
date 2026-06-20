@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { DetectedLoop, LoopType, VariableFile, emptyVariable } from "../src/engine/types";
-import { GraphView } from "../src/engine/engine";
-import { Camera } from "../src/view/camera";
-import { buildNodeBoxes } from "../src/view/geometry";
-import { SceneCache } from "../src/view/sceneCache";
+import {
+  Camera,
+  DetectedLoop,
+  GraphView,
+  LoopType,
+  SceneCache,
+  VariableFile,
+  buildNodeBoxes,
+  emptyVariable,
+} from "@neoloopy/cld-canvas";
 
 function node(id: string, x: number, y: number, label = id, links: { to: string; curvature?: number }[] = []): VariableFile {
   return {

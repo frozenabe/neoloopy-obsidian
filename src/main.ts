@@ -8,8 +8,7 @@ import {
   NeoloopySettings,
   NeoloopySettingTab,
 } from "./settings";
-import { NeoloopyEngine } from "./engine/engine";
-import { NativeEngine } from "./engine/nativeEngine";
+import { NeoloopyEngine, NativeEngine } from "@neoloopy/cld-canvas";
 import { ObsidianStorage } from "./engine/obsidianStorage";
 import { CanvasView, VIEW_TYPE_CANVAS } from "./view/canvasView";
 

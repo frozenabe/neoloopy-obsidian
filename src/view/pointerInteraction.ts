@@ -12,10 +12,15 @@
  * deliberate no-op (parity).
  */
 
-import { GraphView } from "../engine/engine";
-import { Camera, Point } from "./camera";
-import { NodeBox, hitEdge, hitNode } from "./geometry";
-import { Scene } from "./painter";
+import {
+  Camera,
+  GraphView,
+  NodeBox,
+  Point,
+  Scene,
+  hitEdge,
+  hitNode,
+} from "@neoloopy/cld-canvas";
 import { routePointerDown } from "./pointerRouting";
 import { Tap, isDoubleTap } from "./tapGesture";
 

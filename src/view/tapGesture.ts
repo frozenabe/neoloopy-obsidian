@@ -9,7 +9,7 @@
  * rule is testable without a DOM.
  */
 
-import { Point } from "./camera";
+import { Point } from "@neoloopy/cld-canvas";
 
 export interface Tap {
   /** Event timestamp in ms (`PointerEvent.timeStamp`). */

@@ -18,16 +18,16 @@
  *   6. empty space — clear the selection and pan.
  */
 
-import { Point } from "./camera";
 import {
   EdgeGeom,
   NodeBox,
+  Point,
   hitBadge,
   hitEdge,
   hitNode,
   inConnectBand,
   nearSelectedEdge,
-} from "./geometry";
+} from "@neoloopy/cld-canvas";
 
 /** The slice of the scene routing inspects. The painter's `Scene` satisfies it. */
 export interface RoutingScene {

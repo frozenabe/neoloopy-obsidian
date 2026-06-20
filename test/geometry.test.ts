@@ -1,24 +1,22 @@
 import { describe, it, expect } from "vitest";
 import {
+  DetectedLoop,
+  LoopType,
+  VariableFile,
+  VaultLink,
   buildNodeBoxes,
   buildEdgeGeoms,
   collectEdges,
   computeBadges,
   distToSegment,
+  emptyVariable,
   hitEdge,
   hitNode,
   inConnectBand,
   loopEdgeIds,
   nearSelectedEdge,
   nodeBounds,
-} from "../src/view/geometry";
-import {
-  DetectedLoop,
-  LoopType,
-  VariableFile,
-  VaultLink,
-  emptyVariable,
-} from "../src/engine/types";
+} from "@neoloopy/cld-canvas";
 
 function node(id: string, x: number, y: number, links: VaultLink[] = []): VariableFile {
   return { ...emptyVariable(id, id), x, y, links };

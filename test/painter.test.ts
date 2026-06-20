@@ -1,9 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { paint, PaintUi, Scene } from "../src/view/painter";
-import { NodeBox } from "../src/view/geometry";
-import { Camera } from "../src/view/camera";
-import { LIGHT } from "../src/view/theme";
-import { emptyVariable, VariableFile } from "../src/engine/types";
+import {
+  Camera,
+  LIGHT,
+  NodeBox,
+  PaintUi,
+  Scene,
+  VariableFile,
+  emptyVariable,
+  paint,
+} from "@neoloopy/cld-canvas";
 
 /**
  * A recording 2D context: method calls are no-ops except `fillText`, whose first

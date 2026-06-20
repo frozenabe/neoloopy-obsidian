@@ -7,7 +7,7 @@ import {
   canonicalLoopMembers,
   loopMatchesNote,
   loopSlug,
-} from "../src/engine/loopNote";
+} from "@neoloopy/cld-canvas";
 
 const yaml = (s: string): unknown => parseYaml(s);
 

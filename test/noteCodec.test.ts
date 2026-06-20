@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { parse as parseYaml } from "yaml";
-import { parseNote, serializeNote } from "../src/engine/noteCodec";
-import { fnv1a32, contentSignature, stampMeta } from "../src/engine/specHash";
-import { VariableFile, emptyVariable } from "../src/engine/types";
+import {
+  VariableFile,
+  contentSignature,
+  emptyVariable,
+  fnv1a32,
+  parseNote,
+  serializeNote,
+  stampMeta,
+} from "@neoloopy/cld-canvas";
 
 const yaml = (s: string): unknown => parseYaml(s);
 

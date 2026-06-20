@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { parse as parseYaml } from "yaml";
-import { NativeEngine } from "../src/engine/nativeEngine";
-import { MemoryStorage, baseName, joinPath } from "../src/engine/storage";
-import type { VaultStorage } from "../src/engine/storage";
-import { parseLoopNote } from "../src/engine/loopNote";
+import {
+  MemoryStorage,
+  NativeEngine,
+  baseName,
+  joinPath,
+  parseLoopNote,
+} from "@neoloopy/cld-canvas";
+import type { VaultStorage } from "@neoloopy/cld-canvas";
 
 const yaml = (s: string): unknown => parseYaml(s);
 

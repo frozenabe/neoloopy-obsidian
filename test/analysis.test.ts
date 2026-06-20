@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { endogeneity } from "../src/engine/analysis";
-import { LoopGraph } from "../src/engine/loopGraph";
-import { VariableFile, VaultLink, emptyVariable } from "../src/engine/types";
+import {
+  LoopGraph,
+  VariableFile,
+  VaultLink,
+  emptyVariable,
+  endogeneity,
+} from "@neoloopy/cld-canvas";
 
 type LinkSpec = [to: string, polarity: "+" | "-", indirect?: boolean];
 function v(id: string, links: LinkSpec[] = []): VariableFile {

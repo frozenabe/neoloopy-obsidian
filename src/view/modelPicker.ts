@@ -6,7 +6,7 @@
  * Kept obsidian-free so it can be unit-tested directly.
  */
 
-import { ModelRef } from "../engine/engine";
+import { ModelRef } from "@neoloopy/cld-canvas";
 
 export type PickerReconcile =
   | { action: "keep" }

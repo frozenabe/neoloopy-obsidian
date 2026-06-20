@@ -7,7 +7,7 @@ import {
   equationModalModel,
   referenceModeRows,
 } from "../src/engine/panelModel";
-import { emptyVariable, manifestFromJson, VariableFile, VaultLink } from "../src/engine/types";
+import { emptyVariable, manifestFromJson, VariableFile, VaultLink } from "@neoloopy/cld-canvas";
 import { kReferenceShapes } from "../src/engine/referenceShapes";
 
 function stock(id: string, label: string, quant: Record<string, unknown> = {}): VariableFile {

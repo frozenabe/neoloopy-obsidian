@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loopEchoLabel } from "../src/engine/loopKey";
+import { loopEchoLabel } from "@neoloopy/cld-canvas";
 
 describe("loopEchoLabel — human-readable, non-link loop echo", () => {
   it("renders an R loop as 'R · <sorted | labels>'", () => {

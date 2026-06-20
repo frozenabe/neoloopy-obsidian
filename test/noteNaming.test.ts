@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { noteSlug, noteUnslug } from "../src/engine/noteNaming";
+import { noteSlug, noteUnslug } from "@neoloopy/cld-canvas";
 
 describe("noteSlug", () => {
   it("keeps a simple single-word label as-is (case preserved)", () => {

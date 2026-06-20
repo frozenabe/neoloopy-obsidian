@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { normalizePath, TFile, TFolder } from "obsidian";
 import type { Vault, TAbstractFile, FileManager } from "obsidian";
-import { MemoryStorage, type VaultStorage } from "../src/engine/storage";
+import { MemoryStorage, type VaultStorage } from "@neoloopy/cld-canvas";
 import { ObsidianStorage } from "../src/engine/obsidianStorage";
 
 // A hand-written in-memory fake of the slice of Obsidian's Vault API that

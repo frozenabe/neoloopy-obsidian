@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { DetectedLoop, LoopType, VariableFile, emptyVariable } from "../src/engine/types";
 import {
+  DetectedLoop,
+  LoopType,
+  VariableFile,
   buildEdgeGeoms,
   buildNodeBoxes,
   collectEdges,
   computeBadges,
-} from "../src/view/geometry";
+  emptyVariable,
+} from "@neoloopy/cld-canvas";
 import { RoutingScene, Selection, routePointerDown } from "../src/view/pointerRouting";
 
 function node(id: string, x: number, y: number, links: string[] = []): VariableFile {

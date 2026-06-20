@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Camera } from "../src/view/camera";
+import { Camera } from "@neoloopy/cld-canvas";
 
 describe("Camera.centerOn", () => {
   it("places the world point at the viewport center", () => {

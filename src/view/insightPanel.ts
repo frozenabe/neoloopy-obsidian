@@ -8,11 +8,14 @@
  */
 
 import { setIcon } from "obsidian";
-import { GraphView } from "../engine/engine";
-import { LoopType } from "../engine/types";
-import { EndogeneityResult, endogeneity } from "../engine/analysis";
+import {
+  EndogeneityResult,
+  GraphView,
+  LoopType,
+  ParentAnchor,
+  endogeneity,
+} from "@neoloopy/cld-canvas";
 import { RefModeRow, referenceModeRows } from "../engine/panelModel";
-import { ParentAnchor } from "../engine/subsystemLinks";
 
 /** What the panel needs from the canvas. Kept to reads + one selection command. */
 export interface InsightHost {

@@ -16,9 +16,9 @@ import {
   NeoloopyEngine,
   NewVariable,
   QuantPatch,
+  VariableFile,
   VariablePatch,
-} from "../engine/engine";
-import { VariableFile } from "../engine/types";
+} from "@neoloopy/cld-canvas";
 
 export class ModelController {
   constructor(

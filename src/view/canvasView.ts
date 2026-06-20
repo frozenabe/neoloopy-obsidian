@@ -24,25 +24,34 @@ import {
   normalizePath,
 } from "obsidian";
 import type NeoloopyPlugin from "../main";
-import { GraphView, QuantPatch } from "../engine/engine";
-import { LoopType } from "../engine/types";
-import { ParentAnchor, linkPointsToModel } from "../engine/subsystemLinks";
-import { parentPath } from "../engine/storage";
-import { Camera, Point } from "./camera";
+import {
+  Camera,
+  EdgeGeom,
+  GraphView,
+  LoopHighlight,
+  LoopType,
+  ParentAnchor,
+  Point,
+  QuantPatch,
+  Scene,
+  SceneCache,
+  Theme,
+  linkPointsToModel,
+  loopEdgeIds,
+  paint,
+  parentPath,
+  resolveTheme,
+} from "@neoloopy/cld-canvas";
 import { loopNoteKey } from "./loopKeys";
 import { InsightPanel } from "./insightPanel";
 import { CanvasToolbar } from "./canvasToolbar";
 import { SelectionChrome } from "./selectionChrome";
 import { EquationModal, promptText } from "./dialogs";
-import { LoopHighlight, Scene, paint } from "./painter";
-import { Theme, resolveTheme } from "./theme";
-import { SceneCache } from "./sceneCache";
 import { PointerInteraction } from "./pointerInteraction";
 import { KeyboardController } from "./keyboardController";
 import { ModelController } from "./modelController";
 import { LiveEditWatcher } from "./liveEditWatcher";
 import { SelectionAnimator } from "./selectionAnimator";
-import { EdgeGeom, loopEdgeIds } from "./geometry";
 import { reconcileActiveModel } from "./modelPicker";
 
 export const VIEW_TYPE_CANVAS = "neoloopy-canvas";

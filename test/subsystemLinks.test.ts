@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { emptyVariable, VariableFile } from "../src/engine/types";
 import {
-  parseSubsystemLink,
-  linkPointsToModel,
-  deriveParentAnchors,
   ModelKey,
-} from "../src/engine/subsystemLinks";
+  VariableFile,
+  deriveParentAnchors,
+  emptyVariable,
+  linkPointsToModel,
+  parseSubsystemLink,
+} from "@neoloopy/cld-canvas";
 
 function node(id: string, label: string, subsystem?: string): VariableFile {
   return { ...emptyVariable(id, label), subsystem };

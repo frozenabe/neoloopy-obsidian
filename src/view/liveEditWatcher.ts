@@ -12,7 +12,7 @@
  */
 
 import { TAbstractFile, debounce } from "obsidian";
-import { GraphView } from "../engine/engine";
+import { GraphView } from "@neoloopy/cld-canvas";
 
 const LIVE_MS = 2500;
 const SELF_WRITE_MS = 1200;

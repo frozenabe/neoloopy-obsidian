@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ModelRef } from "../src/engine/engine";
+import { ModelRef } from "@neoloopy/cld-canvas";
 import { reconcileActiveModel } from "../src/view/modelPicker";
 
 const ref = (folder: string, name = folder): ModelRef => ({

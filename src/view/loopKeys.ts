@@ -6,8 +6,7 @@
  * to the shared `loopKey` so the view and engine never drift.
  */
 
-import { LoopType } from "../engine/types";
-import { loopKey } from "../engine/loopKey";
+import { LoopType, loopKey } from "@neoloopy/cld-canvas";
 
 /** A loop's resolvable shape — just what key derivation needs. */
 export interface LoopLike {

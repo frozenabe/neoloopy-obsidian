@@ -12,12 +12,15 @@
  */
 
 import { setIcon } from "obsidian";
-import { GraphView, LinkPatch } from "../engine/engine";
-import { VarType } from "../engine/types";
-import { Camera } from "./camera";
-import { EdgeGeom } from "./geometry";
-import { Scene } from "./painter";
-import { GROUP_PALETTE } from "./theme";
+import {
+  Camera,
+  EdgeGeom,
+  GROUP_PALETTE,
+  GraphView,
+  LinkPatch,
+  Scene,
+  VarType,
+} from "@neoloopy/cld-canvas";
 import { LoopLike } from "./loopKeys";
 
 /** What the chrome needs from the canvas: reads + the edit commands it fires. */

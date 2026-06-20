@@ -7,7 +7,7 @@
  * (`referenceModeRows`).
  */
 
-import { ModelManifest, VariableFile } from "./types";
+import { ModelManifest, VariableFile } from "@neoloopy/cld-canvas";
 import { referenceSeries } from "./referenceShapes";
 
 function str(v: unknown): string | undefined {

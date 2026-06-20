@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DetectedLoop, LoopType } from "../src/engine/types";
+import { DetectedLoop, LoopType, loopKey } from "@neoloopy/cld-canvas";
 import { loopMemberNames, loopNoteKey } from "../src/view/loopKeys";
-import { loopKey } from "../src/engine/loopKey";
 
 const nameOf = (labels: Record<string, string>) => (id: string) => labels[id] ?? id;
 

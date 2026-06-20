@@ -9,7 +9,7 @@
 
 import { TFile, TFolder, normalizePath } from "obsidian";
 import type { Vault, FileManager } from "obsidian";
-import { DirListing, VaultStorage, parentPath } from "./storage";
+import { DirListing, VaultStorage, parentPath } from "@neoloopy/cld-canvas";
 
 export class ObsidianStorage implements VaultStorage {
   constructor(

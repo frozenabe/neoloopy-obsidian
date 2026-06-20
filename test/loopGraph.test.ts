@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { LoopGraph, labelLoopsByKey } from "../src/engine/loopGraph";
-import { VariableFile, VaultLink, LoopType, emptyVariable } from "../src/engine/types";
+import {
+  LoopGraph,
+  LoopType,
+  VariableFile,
+  VaultLink,
+  emptyVariable,
+  labelLoopsByKey,
+} from "@neoloopy/cld-canvas";
 
 type LinkSpec = [to: string, polarity: "+" | "-", indirect?: boolean];
 

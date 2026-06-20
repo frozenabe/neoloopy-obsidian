@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { parseNote, serializeNote } from "../src/engine/noteCodec";
+import { parseNote, serializeNote } from "@neoloopy/cld-canvas";
 
 const yaml = (s: string): unknown => parseYaml(s);
 const fixture = (name: string): string =>

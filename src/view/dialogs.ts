@@ -5,8 +5,7 @@
 // no insights pane), not chords Obsidian reserves.
 
 import { App, Modal } from "obsidian";
-import { VariableFile } from "../engine/types";
-import { QuantPatch } from "../engine/engine";
+import { QuantPatch, VariableFile } from "@neoloopy/cld-canvas";
 import { equationModalModel, equationRefs, perElementInitial } from "../engine/panelModel";
 
 const isNumeric = (s: string): boolean => {

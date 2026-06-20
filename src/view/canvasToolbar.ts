@@ -8,7 +8,7 @@
  */
 
 import { App, ButtonComponent, DropdownComponent } from "obsidian";
-import { ModelRef } from "../engine/engine";
+import { ModelRef } from "@neoloopy/cld-canvas";
 import { GlossaryModal, ShortcutsModal } from "./dialogs";
 
 /** What the toolbar needs from the canvas. */
