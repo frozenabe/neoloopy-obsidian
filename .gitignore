@@ -4,3 +4,4 @@ main.js
 .DS_Store
 data.json
 coverage/
+test/webkit/.shim.bundle.js

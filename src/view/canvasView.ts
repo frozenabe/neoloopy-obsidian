@@ -16,6 +16,7 @@ import {
   ItemView,
   Menu,
   Notice,
+  Platform,
   TAbstractFile,
   TFolder,
   WorkspaceLeaf,
@@ -97,6 +98,17 @@ export class CanvasView extends ItemView {
   private toolbar!: CanvasToolbar;
   private renameInput: HTMLInputElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
+
+  /** iOS soft-keyboard avoidance for the inline editor — the WebKit port of the
+   *  Dart app's _kbRecenter*: while a name field is open we pin the canvas to the
+   *  visible band above the keyboard (window.visualViewport, the equivalent of
+   *  Flutter's MediaQuery.viewInsets) so the flex layout can't collapse it to 0,
+   *  and animate-pan the edited node into that band. */
+  private kbEditNodeId: string | null = null;
+  private kbDebounce: number | null = null;
+  private kbViewportHandler: (() => void) | null = null;
+  private panRaf: number | null = null;
+
   private readonly persistViewport: () => void;
 
   // The on-canvas selection chrome (the ⋯ reveal menus, loop badge-note button,
@@ -156,7 +168,9 @@ export class CanvasView extends ItemView {
     const split = root.createDiv({ cls: "neoloopy-canvas-split" });
     this.wrapper = split.createDiv({ cls: "neoloopy-canvas-wrap" });
     this.insightPanel = split.createDiv({ cls: "neoloopy-insight-panel" });
-    this.insightPanel.toggleClass("is-open", this.plugin.settings.insightPanelOpen);
+    // On a phone the panel overlays the canvas (see styles.css); start it closed
+    // so the canvas gets the full width and the camera can fit at a usable zoom.
+    this.insightPanel.toggleClass("is-open", this.plugin.settings.insightPanelOpen && !Platform.isMobile);
     this.insightPanelView = new InsightPanel(this.insightPanel, {
       isOpen: () => this.plugin.settings.insightPanelOpen,
       graph: () => this.graph,
@@ -261,6 +275,15 @@ export class CanvasView extends ItemView {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.wrapper);
 
+    // iOS keyboard avoidance: window.visualViewport shrinks when the soft keyboard
+    // opens (the WebKit analogue of Flutter's MediaQuery.viewInsets). Track it to
+    // keep the inline editor's node in the visible band. Cleaned up in onClose.
+    if (Platform.isMobile && window.visualViewport) {
+      this.kbViewportHandler = () => this.onViewportChange();
+      window.visualViewport.addEventListener("resize", this.kbViewportHandler);
+      window.visualViewport.addEventListener("scroll", this.kbViewportHandler);
+    }
+
     await this.toolbar.refreshModelList();
     await this.openInitialModel();
     this.insightPanelView.render();
@@ -270,6 +293,12 @@ export class CanvasView extends ItemView {
   async onClose(): Promise<void> {
     this.rememberCamera();
     if (this.resizeObserver) this.resizeObserver.disconnect();
+    if (this.kbViewportHandler && window.visualViewport) {
+      window.visualViewport.removeEventListener("resize", this.kbViewportHandler);
+      window.visualViewport.removeEventListener("scroll", this.kbViewportHandler);
+    }
+    if (this.kbDebounce != null) window.clearTimeout(this.kbDebounce);
+    if (this.panRaf != null) cancelAnimationFrame(this.panRaf);
     this.liveWatcher.dispose();
     this.animator.stop();
   }
@@ -349,10 +378,27 @@ export class CanvasView extends ItemView {
       this.camera.ty = mem.ty;
       this.camera.scale = mem.scale;
       this.fittedOnce = true;
+    } else {
+      // No saved viewport: start at the default zoom so a fresh/empty model can't
+      // inherit the previous view's scale. An empty model has nothing to fit, so
+      // without this the first node would be created at that stale scale (e.g.
+      // 0.08 → invisibly tiny: "appears then disappears"). fitIfNeeded() below
+      // overrides this for models that actually have content.
+      this.camera.reset(this.canvas.clientWidth, this.canvas.clientHeight);
     }
     await this.reloadGraph();
     this.toolbar.setSelected(folder);
     this.fitIfNeeded();
+    // Lock in the chosen view (restored / fitted / default) so a later resize —
+    // e.g. the iOS soft keyboard opening when the rename field focuses — can't
+    // re-run "fit once" and zoom to fill the screen with a single node. The one
+    // case we leave pending is a content model whose canvas wasn't laid out yet
+    // (0×0, so fit was skipped); its first real resize still owes a content fit.
+    if (!this.fittedOnce) {
+      const sized = this.canvas.clientWidth > 0 && this.canvas.clientHeight > 0;
+      const empty = !this.graph || this.graph.nodes.length === 0;
+      if (sized || empty) this.fittedOnce = true;
+    }
     this.render();
     if (focusVarId && this.graph) {
       const n = this.graph.nodes.find((x) => x.id === focusVarId);
@@ -771,7 +817,9 @@ export class CanvasView extends ItemView {
     // plain startRename call would do) forfeits the user-gesture token on iOS
     // WebKit: the node gets created but its name box stays un-keyboarded, so a
     // new node can't be named by touch. The box is rebound to the node's id once
-    // the write settles.
+    // the write settles. The node is created right where you tapped; the camera
+    // only moves (animated) if the rising keyboard would cover it — see
+    // recenterForKeyboard, the WebKit port of the Dart app's behaviour.
     const input = this.openRenameInput("", this.camera.toScreen(world.x, world.y));
     const v = await this.model
       .addVariable(this.folder, { label: "", x: world.x, y: world.y })
@@ -779,6 +827,7 @@ export class CanvasView extends ItemView {
         // Persist failed — don't strand the pre-opened input.
         if (this.renameInput === input) this.renameInput = null;
         input.remove();
+        this.exitKbEditing();
         throw e;
       });
     await this.reloadGraph();
@@ -969,11 +1018,15 @@ export class CanvasView extends ItemView {
     input.value = label;
     input.placeholder = "name…";
     // Position is the only genuinely dynamic style (follows the node on screen).
-    input.style.setProperty("--nl-rename-left", `${screen.x - 70}px`);
-    input.style.setProperty("--nl-rename-top", `${screen.y - 14}px`);
+    // The point is the node centre; CSS translate(-50%,-50%) centres the field.
+    input.style.setProperty("--nl-rename-left", `${screen.x}px`);
+    input.style.setProperty("--nl-rename-top", `${screen.y}px`);
     this.renameInput = input;
     input.focus();
     input.select();
+    // iOS: pin the canvas to the band above the soft keyboard so it can't collapse
+    // and the editor stays visible while you type.
+    if (Platform.isMobile) this.enterKbEditing();
     return input;
   }
 
@@ -984,13 +1037,21 @@ export class CanvasView extends ItemView {
     const box = this.scene?.boxes.get(id);
     if (box) {
       const screen = this.camera.toScreen(box.cx, box.cy);
-      input.style.setProperty("--nl-rename-left", `${screen.x - 70}px`);
-      input.style.setProperty("--nl-rename-top", `${screen.y - 14}px`);
+      input.style.setProperty("--nl-rename-left", `${screen.x}px`);
+      input.style.setProperty("--nl-rename-top", `${screen.y}px`);
     }
+    // Arm keyboard avoidance for this node: now that it exists, pan it into the
+    // band when the keyboard finishes rising (mirrors the Dart _kbRecenterNodeId).
+    if (Platform.isMobile) {
+      this.kbEditNodeId = id;
+      this.scheduleKbRecenter();
+    }
+
     const finish = (commit: boolean) => {
       const value = input.value.trim();
       this.renameInput = null;
       input.remove();
+      this.exitKbEditing();
       void this.endRename(id, commit ? value : null, prevLabel);
     };
     input.addEventListener("keydown", (ev) => {
@@ -1003,7 +1064,119 @@ export class CanvasView extends ItemView {
       }
       ev.stopPropagation();
     });
-    input.addEventListener("blur", () => finish(true));
+    // Commit on blur (tap away / keyboard dismiss), matching the Dart app's
+    // onTapOutside: a named node is saved, a still-empty brand-new node is
+    // discarded (endRename removes it). The keyboard-avoidance pin keeps the field
+    // focused while you type, so blur now only fires on a real dismissal.
+    input.addEventListener("blur", () => {
+      finish(true);
+    });
+  }
+
+  // ---- iOS keyboard avoidance (WebKit port of the Dart _kbRecenter* flow) ---
+  //
+  // On iOS the soft keyboard reflows the webview; our flex layout then collapses
+  // the canvas to 0px and an inline input (inside the overflow-hidden wrap) gets
+  // clipped — the diagram + the node you're naming vanish. Flutter dodges this
+  // because its Scaffold shrinks the canvas to the band above the keyboard and the
+  // app pans the node into it. We do the same: while editing, pin the canvas wrap
+  // to window.visualViewport (the visible band) so it can't collapse, and animate-
+  // pan the edited node into the centre of that band.
+
+  /** Pin the canvas wrap to the visible band (visualViewport) so it survives the
+   *  keyboard; the ResizeObserver then reflows the canvas backing + repaints. */
+  private enterKbEditing(): void {
+    const vv = window.visualViewport;
+    if (!Platform.isMobile || !vv) return;
+    const w = this.wrapper;
+    w.classList.add("neoloopy-kb-band");
+    w.style.setProperty("--nl-kb-top", `${Math.max(0, vv.offsetTop)}px`);
+    w.style.setProperty("--nl-kb-height", `${vv.height}px`);
+  }
+
+  /** Release the band overlay and stop tracking; restores the normal flex layout. */
+  private exitKbEditing(): void {
+    this.kbEditNodeId = null;
+    if (this.kbDebounce != null) {
+      window.clearTimeout(this.kbDebounce);
+      this.kbDebounce = null;
+    }
+    if (this.panRaf != null) {
+      cancelAnimationFrame(this.panRaf);
+      this.panRaf = null;
+    }
+    const w = this.wrapper;
+    if (w.classList.contains("neoloopy-kb-band")) {
+      w.classList.remove("neoloopy-kb-band");
+      w.style.removeProperty("--nl-kb-top");
+      w.style.removeProperty("--nl-kb-height");
+    }
+  }
+
+  /** visualViewport changed (keyboard animating / rotating): keep the band sized
+   *  and re-pan the edited node into it. */
+  private onViewportChange(): void {
+    if (!this.wrapper.classList.contains("neoloopy-kb-band")) return;
+    this.enterKbEditing(); // re-apply the band at the new viewport size
+    this.scheduleKbRecenter();
+  }
+
+  private scheduleKbRecenter(): void {
+    if (this.kbDebounce != null) window.clearTimeout(this.kbDebounce);
+    this.kbDebounce = window.setTimeout(() => this.recenterForKeyboard(), 60);
+  }
+
+  /** Pan so the edited node sits centred in the visible band above the keyboard
+   *  (Dart: _recenterForKeyboard + _centeredTranslate). No-op until the keyboard
+   *  is actually up. */
+  private recenterForKeyboard(): void {
+    const vv = window.visualViewport;
+    const id = this.kbEditNodeId;
+    if (id == null || !this.scene || !vv) return;
+    const box = this.scene.boxes.get(id);
+    const kb = window.innerHeight - vv.height; // keyboard height (0 when closed)
+    if (!box || kb <= 1) return;
+    const vw = this.canvas.clientWidth;
+    const vh = this.canvas.clientHeight; // == band height (wrap pinned to vv.height)
+    const tx = vw / 2 - box.cx * this.camera.scale;
+    const ty = vh / 2 - box.cy * this.camera.scale;
+    this.animatePanTo(tx, ty);
+  }
+
+  /** Ease the camera translate to (tx,ty) (~240ms, easeOutCubic), keeping the open
+   *  rename input glued to its node each frame. */
+  private animatePanTo(tx: number, ty: number): void {
+    if (this.panRaf != null) cancelAnimationFrame(this.panRaf);
+    const fromX = this.camera.tx;
+    const fromY = this.camera.ty;
+    if (Math.abs(tx - fromX) < 0.5 && Math.abs(ty - fromY) < 0.5) return;
+    const dur = 240;
+    const start = performance.now();
+    const tick = (now: number): void => {
+      const p = Math.min(1, (now - start) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      this.camera.tx = fromX + (tx - fromX) * e;
+      this.camera.ty = fromY + (ty - fromY) * e;
+      this.repositionRenameInput();
+      this.render();
+      if (p < 1) {
+        this.panRaf = window.requestAnimationFrame(tick);
+      } else {
+        this.panRaf = null;
+        this.persistViewport();
+      }
+    };
+    this.panRaf = window.requestAnimationFrame(tick);
+  }
+
+  /** Keep the open inline editor glued to its node's current screen position. */
+  private repositionRenameInput(): void {
+    if (!this.renameInput || this.kbEditNodeId == null || !this.scene) return;
+    const box = this.scene.boxes.get(this.kbEditNodeId);
+    if (!box) return;
+    const s = this.camera.toScreen(box.cx, box.cy);
+    this.renameInput.style.setProperty("--nl-rename-left", `${s.x}px`);
+    this.renameInput.style.setProperty("--nl-rename-top", `${s.y}px`);
   }
 
   private commitRename(): void {

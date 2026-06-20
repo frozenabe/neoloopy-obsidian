@@ -1,6 +1,6 @@
 {
   "name": "neoloopy-obsidian",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "neoloopy Obsidian plugin — local-first causal-loop diagrams",
   "main": "main.js",
   "type": "module",
@@ -10,7 +10,8 @@
     "typecheck": "tsc -noEmit -skipLibCheck",
     "lint": "eslint .",
     "test": "vitest run",
-    "smoke": "npm run build && node test/smoke/smoke.cjs && node test/smoke/view-smoke.cjs"
+    "smoke": "npm run build && node test/smoke/smoke.cjs && node test/smoke/view-smoke.cjs",
+    "test:ios": "node test/webkit/canvas-harness.mjs"
   },
   "keywords": [
     "obsidian",

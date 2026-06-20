@@ -2,10 +2,10 @@
  * Canvas painter — renders a prepared scene (node boxes, curved edges, loop
  * badges) with the app's visual language ported from
  * `app/lib/painters/graph_painter.dart`. Pure: takes a 2D context + scene +
- * camera + theme + interaction state and draws. Deferred flourishes (marching
- * ants, rotating loop arrows, valence/CLA/subsystem marks) are tracked in
- * Status.md; the core CLD reading — node types, arc edges with polarity chips,
- * R/B badges, and selection + live-edit highlight — is here. Per-node
+ * camera + theme + interaction state and draws. Deferred flourishes (valence/CLA
+ * marks) are tracked in Status.md; the core CLD reading — node types, arc edges
+ * with polarity chips, R/B badges, the subsystem-link corner mark, and selection
+ * + live-edit highlight — is here. Per-node
  * quantitative detail lives in the ƒx node-menu modal, not on the canvas.
  */
 
@@ -272,7 +272,47 @@ function drawNode(
   const maxW = box.w - (box.type === "flow" ? 26 : 14);
   ctx.fillText(fitText(ctx, node.label, maxW), labelX, box.cy);
 
+  // Top-LEFT corner badge when the node drills into a child model (`subsystem`
+  // link set). Empty string is falsy in JS, so this mirrors Dart's
+  // `subsystem != null && subsystem.isNotEmpty`.
+  if (node.subsystem) drawSubsystemMark(ctx, x + 10, y + 10, theme);
+
   ctx.restore();
+}
+
+/**
+ * Stacked-sheets "layers" glyph marking that a node has a connected subsystem,
+ * in subtle theme ink (`ink2`) so it reads as "open me" while staying distinct
+ * from selection teal and loop R/B hues. Mirrors `_paintSubsystemMark` (which
+ * paints Material `Icons.layers`) in `app/lib/painters/graph_painter.dart`;
+ * hand-drawn here because a canvas 2D context can't resolve the Material icon
+ * font. Centered on (cx, cy) within a ~16px box, matching the app's
+ * `rect.left + 10, rect.top + 10` placement.
+ */
+function drawSubsystemMark(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  theme: Theme,
+): void {
+  ctx.strokeStyle = theme.ink2;
+  ctx.lineWidth = 1.4;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  // Front sheet: a rhombus filling the upper half of the icon box.
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 7);
+  ctx.lineTo(cx + 7, cy - 2.5);
+  ctx.lineTo(cx, cy + 2);
+  ctx.lineTo(cx - 7, cy - 2.5);
+  ctx.closePath();
+  ctx.stroke();
+  // Back sheet: a chevron peeking out beneath the front rhombus.
+  ctx.beginPath();
+  ctx.moveTo(cx - 7, cy + 0.5);
+  ctx.lineTo(cx, cy + 5);
+  ctx.lineTo(cx + 7, cy + 0.5);
+  ctx.stroke();
 }
 
 function drawValve(
