@@ -967,6 +967,7 @@ export class CanvasView extends ItemView {
     this.commitRename();
     const input = this.wrapper.createEl("input", { type: "text", cls: "neoloopy-rename-input" });
     input.value = label;
+    input.placeholder = "name…";
     // Position is the only genuinely dynamic style (follows the node on screen).
     input.style.setProperty("--nl-rename-left", `${screen.x - 70}px`);
     input.style.setProperty("--nl-rename-top", `${screen.y - 14}px`);

@@ -270,7 +270,7 @@ function drawNode(
   ctx.textBaseline = "middle";
   const labelX = box.cx + (box.type === "flow" ? 8 : 0);
   const maxW = box.w - (box.type === "flow" ? 26 : 14);
-  ctx.fillText(fitText(ctx, node.label || node.id, maxW), labelX, box.cy);
+  ctx.fillText(fitText(ctx, node.label, maxW), labelX, box.cy);
 
   ctx.restore();
 }
