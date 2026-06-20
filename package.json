@@ -22,6 +22,7 @@
   ],
   "author": "neoloopy",
   "license": "MIT",
+  "workspaces": ["packages/*"],
   "devDependencies": {
     "@types/node": "^20.11.0",
     "esbuild": "^0.28.1",
