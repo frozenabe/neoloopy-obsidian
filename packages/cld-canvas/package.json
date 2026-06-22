@@ -1,12 +1,34 @@
 {
   "name": "@neoloopy/cld-canvas",
-  "version": "0.1.0",
+  "version": "0.1.2",
+  "author": "neoloopy",
+  "license": "MIT",
   "description": "Framework-agnostic CLD canvas renderer + in-memory edit engine (shared by the neoloopy Obsidian plugin and neoloopy.com).",
+  "keywords": [
+    "cld",
+    "causal-loop-diagram",
+    "systems-thinking",
+    "system-dynamics",
+    "feedback-loops",
+    "canvas",
+    "diagram",
+    "visualization",
+    "graph",
+    "neoloopy"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "sideEffects": false,
   "files": ["dist"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/frozenabe/neoloopy-obsidian.git",
+    "directory": "packages/cld-canvas"
+  },
+  "homepage": "https://github.com/frozenabe/neoloopy-obsidian/tree/main/packages/cld-canvas#readme",
+  "bugs": { "url": "https://github.com/frozenabe/neoloopy-obsidian/issues" },
   "scripts": { "build": "tsc -p tsconfig.json" }
 }
