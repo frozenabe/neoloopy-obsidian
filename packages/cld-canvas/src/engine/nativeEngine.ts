@@ -1272,17 +1272,12 @@ function slug(s: string): string {
 
 function randomHex(bytes: number): string {
   const arr = new Uint8Array(bytes);
-  // Web Crypto is exposed as the global `crypto` in both Obsidian (Electron)
-  // and Node (this pure engine's vitest tests). Referenced bare — not via
-  // `window`/`globalThis` — so it resolves under Node too; `typeof`-guarded so
-  // it falls back to Math.random anywhere it is unavailable.
   const c: Crypto | undefined =
     typeof crypto !== "undefined" ? crypto : undefined;
-  if (c && typeof c.getRandomValues === "function") {
-    c.getRandomValues(arr);
-  } else {
-    for (let i = 0; i < bytes; i++) arr[i] = Math.floor(Math.random() * 256);
+  if (!c || typeof c.getRandomValues !== "function") {
+    throw new Error("Web Crypto is required to generate neoloopy ids.");
   }
+  c.getRandomValues(arr);
   let s = "";
   for (const b of arr) s += b.toString(16).padStart(2, "0");
   return s;
@@ -1293,9 +1288,7 @@ function genVarId(): string {
 }
 
 function genModelId(): string {
-  const n = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-  const hex = n.toString(16);
-  return `mdl_${hex.slice(-6)}`;
+  return `mdl_${randomHex(4)}`;
 }
 
 /** Re-export so callers don't need a second import for the signature helper. */

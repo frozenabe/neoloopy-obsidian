@@ -14,6 +14,7 @@ export default [
     ignores: [
       "main.js",
       "node_modules/",
+      "packages/*/dist/",
       "esbuild.config.mjs",
       "eslint.config.mjs",
       "vitest.config.ts",

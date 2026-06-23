@@ -232,16 +232,22 @@ async function main() {
   };
   const app = {
     vault: vaultApi,
-    workspace: { on: () => ({}), getActiveViewOfType: () => null, getLeavesOfType: () => [], getLeaf: () => ({ setViewState: async () => {} }), revealLeaf: () => {}, openLinkText: async () => {} },
+    workspace: { on: () => ({}), onLayoutReady: (cb) => cb(), getActiveViewOfType: () => null, getLeavesOfType: () => [], getLeaf: () => ({ setViewState: async () => {} }), revealLeaf: () => {}, openLinkText: async () => {} },
   };
 
   const rec = { calls: [], texts: [] };
   ctxRec = makeCtx(rec);
 
-  const cjs = path.join(os.tmpdir(), `nl-vmain-${process.pid}.cjs`);
-  fs.writeFileSync(cjs, fs.readFileSync(path.join(pluginRoot, "main.js")));
+  const bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), "nl-vmain-"));
+  const cjs = path.join(bundleDir, "main.cjs");
+  const fd = fs.openSync(cjs, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o600);
+  try {
+    fs.writeFileSync(fd, fs.readFileSync(path.join(pluginRoot, "main.js")));
+  } finally {
+    fs.closeSync(fd);
+  }
   const PluginClass = require(cjs).default || require(cjs);
-  fs.rmSync(cjs, { force: true });
+  fs.rmSync(bundleDir, { recursive: true, force: true });
 
   const plugin = new PluginClass(app, { id: "neoloopy", version: "0.1.0" });
   await plugin.onload();

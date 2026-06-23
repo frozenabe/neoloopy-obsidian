@@ -5,6 +5,17 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-06-23
+
+### Fixed
+
+- Hardened the smoke-test bundle loader so temporary CommonJS copies are created
+  inside private temp directories with exclusive `0600` file creation.
+- Removed CodeQL-prone dynamic regular expression construction from note
+  timestamp preservation.
+- Removed the `Math.random()` fallback from model and variable id generation;
+  ids now require Web Crypto randomness.
+
 ## [0.1.7] - 2026-06-20
 
 ### Added
@@ -115,6 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   annotate them, and export to JSON / Markdown / Mermaid — fully local and
   offline.
 
+[0.1.8]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.8
 [0.1.7]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.7
 [0.1.6]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.6
 [0.1.5]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.5

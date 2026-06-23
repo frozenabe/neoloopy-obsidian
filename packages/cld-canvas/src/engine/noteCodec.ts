@@ -88,9 +88,15 @@ function tagsFrom(v: unknown): string[] {
  */
 function rawScalar(frontmatter: string | null, key: string): string | undefined {
   if (frontmatter === null) return undefined;
-  const m = new RegExp(`^${key}:[ \\t]*(.+?)[ \\t]*$`, "m").exec(frontmatter);
-  if (!m) return undefined;
-  let s = m[1];
+  let s: string | undefined;
+  for (const line of frontmatter.split("\n")) {
+    const colon = line.indexOf(":");
+    if (colon < 0) continue;
+    if (line.slice(0, colon).trim() !== key) continue;
+    s = line.slice(colon + 1).trim();
+    break;
+  }
+  if (s === undefined) return undefined;
   if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
     s = s.slice(1, -1);
   }

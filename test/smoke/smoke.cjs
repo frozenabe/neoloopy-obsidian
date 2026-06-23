@@ -162,6 +162,7 @@ async function main() {
   const app = {
     vault: vaultApi,
     workspace: {
+      onLayoutReady: (cb) => cb(),
       getActiveViewOfType: () => null,
       getLeavesOfType: () => [],
       getLeaf: () => ({ setViewState: async () => {} }),
@@ -174,10 +175,16 @@ async function main() {
 
   // package.json has "type":"module", so Node would treat main.js as ESM. Obsidian
   // always loads it as CommonJS; replicate that by requiring a .cjs copy of the bytes.
-  const cjsCopy = path.join(os.tmpdir(), `nl-main-${process.pid}.cjs`);
-  fs.writeFileSync(cjsCopy, fs.readFileSync(mainJs));
+  const bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), "nl-main-"));
+  const cjsCopy = path.join(bundleDir, "main.cjs");
+  const fd = fs.openSync(cjsCopy, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o600);
+  try {
+    fs.writeFileSync(fd, fs.readFileSync(mainJs));
+  } finally {
+    fs.closeSync(fd);
+  }
   const mod = require(cjsCopy);
-  fs.rmSync(cjsCopy, { force: true });
+  fs.rmSync(bundleDir, { recursive: true, force: true });
   const PluginClass = mod.default || mod;
   check("bundle exports a plugin class", typeof PluginClass === "function");
 

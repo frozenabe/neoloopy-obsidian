@@ -95,9 +95,11 @@
   left: var(--nl-rename-left, 0);
   top: var(--nl-rename-top, 0);
   transform: translate(-50%, -50%);
-  /* !important + box-sizing: Obsidian's mobile CSS stretches inputs to full
-     width; keep this compact field pinned to 140px. */
-  width: 140px !important;
+  /* Obsidian's mobile CSS stretches inputs to full width; cap this inline field
+     so it stays compact without priority overrides. */
+  width: min(140px, calc(100vw - 24px));
+  max-width: 140px;
+  min-width: 0;
   box-sizing: border-box;
   font: 600 13px var(--font-interface, sans-serif);
   text-align: center;
@@ -605,7 +607,7 @@
    keyboard, which then hides the OK/Cancel row (the dialog looks stuck). Pin the
    naming prompt to the TOP and keep it compact so its input AND buttons stay
    visible above the keyboard. `.modal.neoloopy-prompt-modal` outspecifies the
-   default mobile modal rules without !important. */
+   default mobile modal rules. */
 @media (max-width: 600px) {
   .modal.neoloopy-prompt-modal {
     position: fixed;
