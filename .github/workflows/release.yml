@@ -41,6 +41,7 @@ jobs:
       - name: Build plugin
         run: |
           npm ci
+          npm run build --workspace @neoloopy/cld-canvas
           npm run build
 
       - name: Attest build provenance for the release assets
