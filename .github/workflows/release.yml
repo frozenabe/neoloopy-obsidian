@@ -52,7 +52,7 @@ jobs:
             manifest.json
             styles.css
 
-      - name: Create release
+      - name: Create or publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -67,10 +67,22 @@ jobs:
             flag && /^\[[^][]*\]:/ { exit }
             flag { print }
           ' CHANGELOG.md > release-notes.md
-          if [ -s release-notes.md ]; then
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" main.js manifest.json styles.css --clobber
+            if [ -s release-notes.md ]; then
+              gh release edit "$tag" \
+                --title="$tag" \
+                --draft=false \
+                --notes-file release-notes.md
+            else
+              echo "::warning::No CHANGELOG.md section for $tag; preserving existing release notes."
+              gh release edit "$tag" \
+                --title="$tag" \
+                --draft=false
+            fi
+          elif [ -s release-notes.md ]; then
             gh release create "$tag" \
               --title="$tag" \
-              --draft \
               --notes-file release-notes.md \
               --generate-notes \
               main.js manifest.json styles.css
@@ -78,7 +90,6 @@ jobs:
             echo "::warning::No CHANGELOG.md section for $tag; using generated notes only."
             gh release create "$tag" \
               --title="$tag" \
-              --draft \
               --generate-notes \
               main.js manifest.json styles.css
           fi
