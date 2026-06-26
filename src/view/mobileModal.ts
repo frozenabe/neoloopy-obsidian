@@ -25,10 +25,16 @@ export function keyboardAwareModal(modal: Modal): () => void {
   // Drive the position + scroll cap through CSS custom properties (the stylesheet
   // consumes them), rather than writing layout styles inline.
   const apply = (): void => {
-    const margin = 8;
-    // Reserve the title bar (plus breathing room); the rest is scrollable.
-    const reserved = modal.titleEl.offsetHeight + margin * 4;
-    box.setCssProps({ "--neoloopy-kb-top": `${vv.offsetTop + margin}px` });
+    // Sit just below the safe area (iOS notch / Dynamic Island / camera) — the
+    // stylesheet adds env(safe-area-inset-top) to this gap so the modal clears
+    // the camera on any device. `safeTopReserve` is a conservative estimate of
+    // that inset used only for the height cap, so the modal still fits above the
+    // keyboard on a notched phone.
+    const gap = 10;
+    const bottomGap = 12;
+    const safeTopReserve = 56;
+    box.setCssProps({ "--neoloopy-kb-top": `${vv.offsetTop + gap}px` });
+    const reserved = safeTopReserve + gap + modal.titleEl.offsetHeight + bottomGap;
     content.setCssProps({
       "--neoloopy-kb-maxh": `${Math.max(140, vv.height - reserved)}px`,
     });

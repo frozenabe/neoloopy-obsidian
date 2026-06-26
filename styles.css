@@ -706,7 +706,7 @@
 @media (max-width: 600px) {
   .modal.neoloopy-kbaware-modal {
     position: fixed;
-    top: var(--neoloopy-kb-top, 10px);
+    top: calc(env(safe-area-inset-top, 0px) + var(--neoloopy-kb-top, 10px));
     bottom: auto;
     left: 50%;
     right: auto;
