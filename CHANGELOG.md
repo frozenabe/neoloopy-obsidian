@@ -5,6 +5,16 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-06-26
+
+### Fixed
+
+- **Mobile: the soft keyboard no longer covers a modal.** On a phone the ƒx
+  editor (and the glossary search) opened behind the keyboard, hiding the lower
+  fields and the Save/Cancel row so they had to be typed blind. These modals now
+  pin to the top of the screen and cap their height to the space above the
+  keyboard, with the content scrollable and the Save/Cancel row kept in view.
+
 ## [0.1.9] - 2026-06-26
 
 ### Added
