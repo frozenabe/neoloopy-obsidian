@@ -131,13 +131,16 @@ export class EquationModal extends Modal {
       text: "Quantitative definition — no simulation runs here.",
     });
 
-    // Public-interface role in subsystem composition (read-only). Shown only when
-    // this variable is exposed to a parent model; private variables show nothing.
-    if (vm.visibility) {
+    // Public-interface role in subsystem composition (read-only). Shown for every
+    // variable in a quant model — Public input / Public output / Private — so the
+    // role is always visible; a purely qualitative model shows nothing. Setting it
+    // is quant authoring (the companion app / CLI).
+    if (vm.isQuantContext) {
       const vis = c.createDiv({ cls: "neoloopy-eq-vis" });
+      const v = vm.visibility;
       vis.createSpan({
-        cls: `neoloopy-eq-vischip is-${vm.visibility}`,
-        text: vm.visibility === "input" ? "Public input" : "Public output",
+        cls: `neoloopy-eq-vischip is-${v ?? "private"}`,
+        text: v === "input" ? "Public input" : v === "output" ? "Public output" : "Private",
       });
     }
 

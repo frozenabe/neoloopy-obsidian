@@ -218,6 +218,12 @@ export interface EquationModalModel {
    * Read-only — publishing happens in the app/CLI/MCP.
    */
   visibility: Visibility | null;
+  /**
+   * Whether this is a quantitative model (some variable carries a `quant`
+   * block). The public/private role is only meaningful — and only shown — here;
+   * a purely qualitative model never displays a visibility chip.
+   */
+  isQuantContext: boolean;
 }
 
 /**
@@ -252,6 +258,7 @@ export function equationModalModel(node: VariableFile, nodes: VariableFile[]): E
     units: quantField(node, "units"),
     unitSuggestions: distinctUnits(nodes.map((n) => quantField(n, "units"))),
     visibility: quantVisibility(node),
+    isQuantContext: nodes.some((n) => "quant" in n.extra),
   };
 }
 

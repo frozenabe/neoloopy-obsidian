@@ -170,6 +170,7 @@ describe("equationModalModel", () => {
     expect(m.units).toBe("");
     expect(m.referenced).toEqual([]);
     expect(m.visibility).toBeNull();
+    expect(m.isQuantContext).toBe(false);
   });
 
   it("surfaces a variable's public-interface visibility", () => {
@@ -180,6 +181,19 @@ describe("equationModalModel", () => {
       extra: { quant: { equation: "1", visibility: "input" } },
     };
     expect(equationModalModel(inp, [inp]).visibility).toBe("input");
+  });
+
+  it("flags a quant context when any node carries a quant block (drives the chip)", () => {
+    const priv = stock("w", "Water", { initial: "100" }); // quant, unpublished
+    const plain = { ...flow("d", "Drain", "w", "-") }; // no quant block
+    // A private variable in a quant model: visibility null but still a quant
+    // context, so the modal shows a "Private" chip.
+    const m = equationModalModel(priv, [priv, plain]);
+    expect(m.visibility).toBeNull();
+    expect(m.isQuantContext).toBe(true);
+    // A variable in a purely qualitative model: no chip.
+    const q = emptyVariable("a", "A");
+    expect(equationModalModel(q, [q, emptyVariable("b", "B")]).isQuantContext).toBe(false);
   });
 });
 
