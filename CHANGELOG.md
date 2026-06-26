@@ -5,6 +5,22 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-06-26
+
+### Fixed
+
+- **Mobile: the keyboard-aware modal now clears the iOS camera.** It was pinned
+  flush to the top, behind the notch / Dynamic Island; it now sits just below the
+  safe area.
+
+### Changed
+
+- **The ƒx editor shows every variable's public/private role in a quant model.**
+  Previously only a published public input/output showed a chip; now Public
+  input / Public output / **Private** is always shown for variables in a
+  quantitative model (purely qualitative models show nothing), so the role is
+  easy to find. It stays read-only — set it in the companion app.
+
 ## [0.1.10] - 2026-06-26
 
 ### Fixed
