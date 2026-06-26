@@ -5,6 +5,25 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-06-26
+
+### Added
+
+- **Subsystem public interface in the ƒx editor.** A variable that a parent
+  model exposes now shows a **Public input** / **Public output** chip, and a node
+  that drills into a child model shows a read-only **Subsystem · \<child\>**
+  section listing the child's outputs as `Child.[Node]` references and its inputs
+  with any parent-side binding — mirroring the companion app's hierarchical
+  models, while publishing and binding stay in the app. Private variables show
+  nothing.
+
+### Fixed
+
+- The ƒx editor's **Uses** list now recognizes multi-word variable names. A name
+  like `Effective Rate` was being split into `Effective` and `Rate` and wrongly
+  flagged as "Not defined in this model"; multi-word names are now matched as a
+  whole.
+
 ## [0.1.8] - 2026-06-23
 
 ### Fixed
