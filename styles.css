@@ -698,6 +698,40 @@
   }
 }
 
+/* On a phone, tall modals (ƒx, glossary) are pinned to the top and their content
+   scrolls within the band left visible above the soft keyboard — the max-height
+   + top are set inline from window.visualViewport by keyboardAwareModal(), this
+   supplies the positioning + the scroll container + a sticky action row so the
+   Save/Cancel buttons stay reachable while the content scrolls. */
+@media (max-width: 600px) {
+  .modal.neoloopy-kbaware-modal {
+    position: fixed;
+    top: var(--neoloopy-kb-top, 10px);
+    bottom: auto;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(94vw, 520px);
+    max-width: 94vw;
+    max-height: none;
+    margin: 0;
+    border-radius: 12px;
+  }
+  .neoloopy-kbaware-content {
+    max-height: var(--neoloopy-kb-maxh, 80vh);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .neoloopy-kbaware-modal .neoloopy-eq-actions {
+    position: sticky;
+    bottom: 0;
+    margin-top: 14px;
+    padding-top: 8px;
+    background: var(--background-primary);
+    box-shadow: 0 -6px 8px -6px rgba(0, 0, 0, 0.35);
+  }
+}
+
 /* ---- insight panel ------------------------------------------------------- */
 .neoloopy-canvas-split {
   display: flex;

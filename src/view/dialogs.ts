@@ -14,6 +14,7 @@ import {
   quantInputBindings,
 } from "@neoloopy/cld-canvas";
 import { equationModalModel, equationRefs, perElementInitial } from "../engine/panelModel";
+import { keyboardAwareModal } from "./mobileModal";
 
 const isNumeric = (s: string): boolean => {
   const t = s.trim();
@@ -104,6 +105,8 @@ class PromptModal extends Modal {
  * aging chain) are intentionally absent.
  */
 export class EquationModal extends Modal {
+  private kbTeardown: () => void = () => {};
+
   constructor(
     app: App,
     private readonly node: VariableFile,
@@ -223,6 +226,7 @@ export class EquationModal extends Modal {
       );
     });
 
+    this.kbTeardown = keyboardAwareModal(this);
     window.setTimeout(() => primary.focus(), 0);
   }
 
@@ -270,6 +274,7 @@ export class EquationModal extends Modal {
   }
 
   onClose(): void {
+    this.kbTeardown();
     this.contentEl.empty();
   }
 }
@@ -381,6 +386,8 @@ const GLOSSARY_SOURCE =
   "Adapted from David N. Ford, “A system dynamics glossary,” System Dynamics Review 35(4):369–379 (2019), CC-BY.";
 
 export class GlossaryModal extends Modal {
+  private kbTeardown: () => void = () => {};
+
   constructor(app: App) {
     super(app);
   }
@@ -421,9 +428,11 @@ export class GlossaryModal extends Modal {
     window.setTimeout(() => search.focus(), 0);
 
     contentEl.createDiv({ cls: "neoloopy-glossary-source", text: GLOSSARY_SOURCE });
+    this.kbTeardown = keyboardAwareModal(this);
   }
 
   onClose(): void {
+    this.kbTeardown();
     this.contentEl.empty();
   }
 }
@@ -487,6 +496,8 @@ const SHORTCUTS: ShortcutGroup[] = [
 ];
 
 export class ShortcutsModal extends Modal {
+  private kbTeardown: () => void = () => {};
+
   constructor(app: App) {
     super(app);
   }
@@ -504,9 +515,11 @@ export class ShortcutsModal extends Modal {
         row.createDiv({ cls: "neoloopy-sc-desc", text: r.desc });
       }
     }
+    this.kbTeardown = keyboardAwareModal(this);
   }
 
   onClose(): void {
+    this.kbTeardown();
     this.contentEl.empty();
   }
 }
