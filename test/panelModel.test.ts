@@ -81,6 +81,31 @@ describe("equationRefs", () => {
     expect(equationRefs("a + a - b - b", ["a"]))
       .toEqual({ referenced: ["a"], unknown: ["b"] });
   });
+
+  it("matches a multi-word variable name as one reference", () => {
+    expect(equationRefs("Effective Rate * 0.5", ["Effective Rate", "Base Rate"]))
+      .toEqual({ referenced: ["Effective Rate"], unknown: [] });
+  });
+
+  it("keeps a leftover identifier next to a multi-word name as unknown", () => {
+    expect(equationRefs("Effective Rate + foo", ["Effective Rate"]))
+      .toEqual({ referenced: ["Effective Rate"], unknown: ["foo"] });
+  });
+
+  it("returns multi-word references in model order", () => {
+    expect(equationRefs("Effective Rate - Base Rate", ["Base Rate", "Effective Rate"]))
+      .toEqual({ referenced: ["Base Rate", "Effective Rate"], unknown: [] });
+  });
+
+  it("does not claim a name's words inside a longer known name", () => {
+    expect(equationRefs("Effective Rate", ["Effective Rate", "Rate"]))
+      .toEqual({ referenced: ["Effective Rate"], unknown: [] });
+  });
+
+  it("only matches whole words, not a name embedded in a longer token", () => {
+    expect(equationRefs("Rates rise", ["Rate"]))
+      .toEqual({ referenced: [], unknown: ["Rates", "rise"] });
+  });
 });
 
 describe("distinctUnits", () => {
@@ -144,6 +169,17 @@ describe("equationModalModel", () => {
     expect(m.primaryValue).toBe("");
     expect(m.units).toBe("");
     expect(m.referenced).toEqual([]);
+    expect(m.visibility).toBeNull();
+  });
+
+  it("surfaces a variable's public-interface visibility", () => {
+    const out = stock("w", "Water", { initial: "100", visibility: "output" });
+    expect(equationModalModel(out, [out]).visibility).toBe("output");
+    const inp: VariableFile = {
+      ...flow("d", "Drain", "w", "-"),
+      extra: { quant: { equation: "1", visibility: "input" } },
+    };
+    expect(equationModalModel(inp, [inp]).visibility).toBe("input");
   });
 });
 

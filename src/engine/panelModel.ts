@@ -7,7 +7,12 @@
  * (`referenceModeRows`).
  */
 
-import { ModelManifest, VariableFile } from "@neoloopy/cld-canvas";
+import {
+  ModelManifest,
+  VariableFile,
+  Visibility,
+  quantVisibility,
+} from "@neoloopy/cld-canvas";
 import { referenceSeries } from "./referenceShapes";
 
 function str(v: unknown): string | undefined {
@@ -79,36 +84,83 @@ export interface EquationRefs {
  * Which model variables an [equation] references and which identifiers it uses
  * that match no variable. A lightweight, engineless approximation of the app's
  * parser-based `analyzeEquation`: the plugin ships no expression parser (that is
- * the simulation engine), so this tokenizes identifiers instead. An identifier
- * immediately followed by `(` is treated as a function call and ignored; one
- * preceded by a digit or `.` (e.g. the `e` in `1e3`) is skipped as part of a
- * number. It cannot flag the syntax errors the simulator would.
+ * the simulation engine).
+ *
+ * Variable names may contain spaces (e.g. `Effective Rate`), so single-token
+ * matching would wrongly split them ("Effective", "Rate"). Instead we first
+ * claim whole known-variable *phrases* — longest first, on word boundaries — and
+ * only then scan the unclaimed gaps for bare identifiers, which become unknowns.
+ * An identifier immediately followed by `(` is a function call and is ignored;
+ * one preceded by a digit or `.` (e.g. the `e` in `1e3`) is part of a number.
+ * It cannot flag the syntax errors the simulator would.
  */
 export function equationRefs(equation: string, variableNames: string[]): EquationRefs {
   const eq = equation.trim();
   if (eq.length === 0) return { referenced: [], unknown: [] };
-  const known = new Map(variableNames.map((n) => [n.toLowerCase(), n]));
-  const used = new Set<string>(); // lowercased referenced var names
-  const unknownOrder: string[] = [];
-  const unknownSeen = new Set<string>();
 
-  const re = /[A-Za-z_][A-Za-z0-9_]*/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(eq)) !== null) {
-    const before = m.index > 0 ? eq[m.index - 1] : "";
-    if (/[0-9.]/.test(before)) continue; // part of a numeric literal (e.g. 1e3)
-    let after = re.lastIndex;
-    while (after < eq.length && /\s/.test(eq[after])) after++;
-    if (eq[after] === "(") continue; // function call — not a variable reference
-    const lower = m[0].toLowerCase();
-    if (known.has(lower)) used.add(lower);
-    else if (!unknownSeen.has(lower)) {
-      unknownSeen.add(lower);
-      unknownOrder.push(m[0]);
+  const isWord = (ch: string): boolean => ch.length > 0 && /[A-Za-z0-9_]/.test(ch);
+  const nextNonSpace = (from: number): string => {
+    let j = from;
+    while (j < eq.length && /\s/.test(eq[j])) j++;
+    return j < eq.length ? eq[j] : "";
+  };
+
+  // Character spans of `eq` already claimed by a known-variable phrase, so the
+  // bare-identifier scan below skips the words inside a multi-word name.
+  const claimed: Array<[number, number]> = [];
+  const overlaps = (s: number, e: number): boolean =>
+    claimed.some(([cs, ce]) => s < ce && cs < e);
+  const used = new Set<string>(); // lowercased referenced var names
+
+  // Longest names first so "Effective Rate" claims its span before "Rate" can.
+  const byLongest = [...variableNames].sort((a, b) => b.length - a.length);
+  for (const name of byLongest) {
+    const n = name.trim();
+    if (n.length === 0) continue;
+    // Literal name match, tolerant of internal whitespace runs.
+    const pattern = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    const re = new RegExp(pattern, "gi");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(eq)) !== null) {
+      if (m[0].length === 0) {
+        re.lastIndex++;
+        continue;
+      }
+      const start = m.index;
+      const end = start + m[0].length;
+      const before = start > 0 ? eq[start - 1] : "";
+      const after = end < eq.length ? eq[end] : "";
+      if (isWord(before) || isWord(after)) continue; // not a whole-word match
+      if (before === "." || /[0-9]/.test(before)) continue; // numeric context
+      if (nextNonSpace(end) === "(") continue; // function call — not a reference
+      if (overlaps(start, end)) continue; // sits inside a longer known name
+      claimed.push([start, end]);
+      used.add(n.toLowerCase());
     }
   }
+
+  // Bare identifiers left in the unclaimed gaps are unknown references.
+  const unknownOrder: string[] = [];
+  const unknownSeen = new Set<string>();
+  const tok = /[A-Za-z_][A-Za-z0-9_]*/g;
+  let t: RegExpExecArray | null;
+  while ((t = tok.exec(eq)) !== null) {
+    const start = t.index;
+    const end = tok.lastIndex;
+    if (overlaps(start, end)) continue; // part of a claimed variable phrase
+    const before = start > 0 ? eq[start - 1] : "";
+    if (/[0-9.]/.test(before)) continue; // part of a numeric literal (e.g. 1e3)
+    if (nextNonSpace(end) === "(") continue; // function call — not a reference
+    const lower = t[0].toLowerCase();
+    if (used.has(lower)) continue; // already counted as a single-word reference
+    if (!unknownSeen.has(lower)) {
+      unknownSeen.add(lower);
+      unknownOrder.push(t[0]);
+    }
+  }
+
   return {
-    referenced: variableNames.filter((n) => used.has(n.toLowerCase())),
+    referenced: variableNames.filter((n) => used.has(n.trim().toLowerCase())),
     unknown: unknownOrder,
   };
 }
@@ -160,6 +212,12 @@ export interface EquationModalModel {
   unknown: string[];
   units: string;
   unitSuggestions: string[];
+  /**
+   * The variable's public-interface role in subsystem composition: a public
+   * `input`/`output` exposed to a parent model, or `null` (private/internal).
+   * Read-only — publishing happens in the app/CLI/MCP.
+   */
+  visibility: Visibility | null;
 }
 
 /**
@@ -193,6 +251,7 @@ export function equationModalModel(node: VariableFile, nodes: VariableFile[]): E
     unknown: refs.unknown,
     units: quantField(node, "units"),
     unitSuggestions: distinctUnits(nodes.map((n) => quantField(n, "units"))),
+    visibility: quantVisibility(node),
   };
 }
 

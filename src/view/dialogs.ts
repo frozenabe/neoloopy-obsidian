@@ -5,7 +5,14 @@
 // no insights pane), not chords Obsidian reserves.
 
 import { App, Modal } from "obsidian";
-import { QuantPatch, VariableFile } from "@neoloopy/cld-canvas";
+import {
+  ChildInterface,
+  InputBinding,
+  QuantPatch,
+  VariableFile,
+  qualifiedRef,
+  quantInputBindings,
+} from "@neoloopy/cld-canvas";
 import { equationModalModel, equationRefs, perElementInitial } from "../engine/panelModel";
 
 const isNumeric = (s: string): boolean => {
@@ -102,6 +109,9 @@ export class EquationModal extends Modal {
     private readonly node: VariableFile,
     private readonly nodes: VariableFile[],
     private readonly onSave: (patch: QuantPatch) => Promise<void>,
+    /** The linked child's public interface, pre-resolved by the caller; null
+     *  when this node is not a subsystem anchor. Read-only preview. */
+    private readonly iface: ChildInterface | null = null,
   ) {
     super(app);
   }
@@ -117,6 +127,16 @@ export class EquationModal extends Modal {
       cls: "neoloopy-eq-hint",
       text: "Quantitative definition — no simulation runs here.",
     });
+
+    // Public-interface role in subsystem composition (read-only). Shown only when
+    // this variable is exposed to a parent model; private variables show nothing.
+    if (vm.visibility) {
+      const vis = c.createDiv({ cls: "neoloopy-eq-vis" });
+      vis.createSpan({
+        cls: `neoloopy-eq-vischip is-${vm.visibility}`,
+        text: vm.visibility === "input" ? "Public input" : "Public output",
+      });
+    }
 
     // Primary field: Initial value (stock) or Equation (flow/auxiliary).
     c.createDiv({ cls: "neoloopy-eq-label", text: vm.primaryLabel });
@@ -166,6 +186,11 @@ export class EquationModal extends Modal {
     renderUses(vm.primaryValue);
     primary.addEventListener("input", () => renderUses(primary.value));
 
+    // Subsystem interface (read-only) when this node drills into a child model.
+    if (this.iface && (this.iface.outputs.length > 0 || this.iface.inputs.length > 0)) {
+      this.renderInterface(c, this.iface);
+    }
+
     // Units (both) with suggestions drawn from the model's existing units.
     c.createDiv({ cls: "neoloopy-eq-label", text: "Units" });
     const units = c.createEl("input", { type: "text", cls: "neoloopy-eq-input" });
@@ -199,6 +224,49 @@ export class EquationModal extends Modal {
     });
 
     window.setTimeout(() => primary.focus(), 0);
+  }
+
+  /**
+   * The linked child model's public interface, read-only: the outputs it offers
+   * (as qualified `Child.[Node]` references the parent can use) and the inputs it
+   * expects, each with any parent-side binding declared on this anchor node.
+   * Binding + publishing are quant authoring (app/CLI/MCP), so this never edits.
+   */
+  private renderInterface(parent: HTMLElement, iface: ChildInterface): void {
+    const bindings = quantInputBindings(this.node);
+    const boundExpr = (input: string): string => {
+      const b = bindings.find(
+        (x: InputBinding) => x.child === iface.qualifier && x.target === input,
+      );
+      return (b?.expr ?? "").trim();
+    };
+
+    const sec = parent.createDiv({ cls: "neoloopy-eq-section neoloopy-eq-subsystem" });
+    sec.createDiv({ cls: "neoloopy-eq-label", text: `Subsystem · ${iface.qualifier}` });
+
+    if (iface.outputs.length > 0) {
+      sec.createDiv({ cls: "neoloopy-eq-sublabel", text: "Outputs" });
+      const chips = sec.createDiv({ cls: "neoloopy-eq-chips" });
+      for (const o of iface.outputs) {
+        chips.createSpan({
+          cls: "neoloopy-eq-chip is-output",
+          text: qualifiedRef(iface.qualifier, o),
+        });
+      }
+    }
+
+    if (iface.inputs.length > 0) {
+      sec.createDiv({ cls: "neoloopy-eq-sublabel", text: "Inputs" });
+      for (const inp of iface.inputs) {
+        const row = sec.createDiv({ cls: "neoloopy-eq-subrow" });
+        row.createSpan({ cls: "neoloopy-eq-subname", text: inp });
+        const expr = boundExpr(inp);
+        row.createSpan({
+          cls: `neoloopy-eq-subexpr${expr ? "" : " is-unbound"}`,
+          text: expr || "unbound",
+        });
+      }
+    }
   }
 
   onClose(): void {

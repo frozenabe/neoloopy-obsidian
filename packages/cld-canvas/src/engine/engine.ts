@@ -14,6 +14,7 @@ import {
 } from "./types";
 import { Rendered } from "./exporters";
 import { ParentAnchor } from "./subsystemLinks";
+import { ChildInterface } from "./publicInterface";
 
 /** Lightweight model descriptor for pickers/lists (no notes loaded). */
 export interface ModelRef {
@@ -238,4 +239,14 @@ export interface NeoloopyEngine {
    * Each anchor names the parent model + the linking variable. Empty when none.
    */
   deriveParents(folder: string): Promise<ParentAnchor[]>;
+
+  /**
+   * The public interface of the child model linked from `varId`'s subsystem
+   * anchor: a display qualifier (the link alias, else the child model name) plus
+   * the labels of the child's public OUTPUTS and INPUTS. Null when the node has
+   * no subsystem link, or the child can't be resolved/loaded (fail closed —
+   * callers render a muted fallback). Read-only: the qualitative engine never
+   * edits the quant interface (publish/bind live in the app/CLI/MCP).
+   */
+  childInterface(folder: string, varId: string): Promise<ChildInterface | null>;
 }

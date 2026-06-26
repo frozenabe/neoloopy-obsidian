@@ -216,7 +216,7 @@ export class CanvasView extends ItemView {
       setNodeType: (id, t) => void this.setNodeType(id, t),
       setNodeGroup: (id, grp) => void this.setNodeGroup(id, grp),
       openSubsystemMenu: (ev) => void this.openSubsystemMenu(ev),
-      openEquationModal: () => this.openEquationModal(),
+      openEquationModal: () => void this.openEquationModal(),
       patchLink: (g, patch) => void this.patchLink(g, patch),
       deleteSelection: () => void this.deleteSelection(),
       openLoopNote: (key) => void this.openLoopNote(key),
@@ -881,13 +881,19 @@ export class CanvasView extends ItemView {
   }
 
   /** Open the ƒx modal to view/edit the selected variable's quant definition. */
-  private openEquationModal(): void {
+  private async openEquationModal(): Promise<void> {
     if (!this.folder || !this.selNode || !this.graph) return;
     const id = this.selNode;
+    const folder = this.folder;
     const node = this.graph.nodes.find((n) => n.id === id);
     if (!node) return;
+    // Pre-resolve the linked child's public interface (null for a plain node) so
+    // the modal can render it read-only without an async builder. Fail closed.
+    const iface = node.subsystem
+      ? await this.plugin.engine.childInterface(folder, id).catch(() => null)
+      : null;
     new EquationModal(this.app, node, this.graph.nodes, (patch) =>
-      this.setEquation(id, patch),
+      this.setEquation(id, patch), iface,
     ).open();
   }
 

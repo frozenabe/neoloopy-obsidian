@@ -592,6 +592,73 @@ describe("deriveParents", () => {
   });
 });
 
+describe("childInterface", () => {
+  // The plugin never authors visibility (publish/bind are quant authoring, in
+  // the app/CLI/MCP); simulate an app-published child note by writing the quant
+  // block straight to disk — the field the codec preserves verbatim.
+  async function publish(
+    storage: MemoryStorage,
+    folder: string,
+    label: string,
+    visibility: "input" | "output",
+  ): Promise<void> {
+    const { files } = await storage.list(joinPath(folder, "Nodes"));
+    for (const path of files) {
+      const note = parseNote(await storage.read(path), yaml);
+      if (note.label === label) {
+        const prev = (note.extra.quant ?? {}) as Record<string, unknown>;
+        note.extra = { ...note.extra, quant: { ...prev, visibility } };
+        await storage.write(path, serializeNote(note));
+        return;
+      }
+    }
+    throw new Error(`no node labeled ${label}`);
+  }
+
+  it("resolves the linked child's public inputs and outputs", async () => {
+    const { storage, engine } = makeEngine();
+    const child = await engine.createModel("Rework");
+    await engine.addVariable(child.folder, { label: "Defect Rate" });
+    await engine.addVariable(child.folder, { label: "Staffing" });
+    await engine.addVariable(child.folder, { label: "Internal" });
+    await publish(storage, child.folder, "Defect Rate", "output");
+    await publish(storage, child.folder, "Staffing", "input");
+
+    const parent = await engine.createModel("Project");
+    const anchor = await engine.addVariable(parent.folder, { label: "Rework Cycle" });
+    await engine.setSubsystem(parent.folder, anchor.id, {
+      folder: child.folder,
+      name: child.name,
+    });
+
+    const iface = await engine.childInterface(parent.folder, anchor.id);
+    expect(iface).not.toBeNull();
+    expect(iface!.qualifier).toBe("Rework");
+    expect(iface!.outputs).toEqual(["Defect Rate"]);
+    expect(iface!.inputs).toEqual(["Staffing"]);
+  });
+
+  it("returns null when the node carries no subsystem link", async () => {
+    const { engine } = makeEngine();
+    const m = await engine.createModel("Solo");
+    const v = await engine.addVariable(m.folder, { label: "X" });
+    expect(await engine.childInterface(m.folder, v.id)).toBeNull();
+  });
+
+  it("fails closed (null) when the linked child is gone", async () => {
+    const { engine } = makeEngine();
+    const child = await engine.createModel("Gone");
+    const parent = await engine.createModel("Parent");
+    const anchor = await engine.addVariable(parent.folder, { label: "Sector" });
+    await engine.setSubsystem(parent.folder, anchor.id, {
+      folder: child.folder,
+      name: child.name,
+    });
+    await engine.deleteModel(child.folder);
+    expect(await engine.childInterface(parent.folder, anchor.id)).toBeNull();
+  });
+});
+
 describe("NativeEngine — node files named by label", () => {
   it("names a variable note by its label slug, keeping the var id in frontmatter", async () => {
     const { storage, engine } = makeEngine();

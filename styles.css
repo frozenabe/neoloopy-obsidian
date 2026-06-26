@@ -578,6 +578,77 @@
   color: var(--text-error);
 }
 
+/* Public-interface visibility chip (subsystem composition, read-only). */
+.neoloopy-eq-vis {
+  margin: -4px 0 12px;
+}
+
+.neoloopy-eq-vischip {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.neoloopy-eq-vischip.is-output {
+  border-color: var(--color-green, var(--interactive-accent));
+  color: var(--color-green, var(--interactive-accent));
+}
+
+.neoloopy-eq-vischip.is-input {
+  border-color: var(--color-blue, var(--interactive-accent));
+  color: var(--color-blue, var(--interactive-accent));
+}
+
+/* Subsystem interface preview: the linked child's outputs and inputs. */
+.neoloopy-eq-subsystem {
+  padding: 10px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+
+.neoloopy-eq-sublabel {
+  margin: 8px 0 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.neoloopy-eq-chip.is-output {
+  font-family: var(--font-monospace);
+}
+
+.neoloopy-eq-subrow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.neoloopy-eq-subname {
+  flex: 0 0 auto;
+  min-width: 96px;
+  font-size: 12px;
+  color: var(--text-normal);
+}
+
+.neoloopy-eq-subexpr {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  color: var(--text-normal);
+}
+
+.neoloopy-eq-subexpr.is-unbound {
+  font-style: italic;
+  color: var(--text-faint);
+}
+
 .neoloopy-eq-actions {
   display: flex;
   justify-content: flex-end;

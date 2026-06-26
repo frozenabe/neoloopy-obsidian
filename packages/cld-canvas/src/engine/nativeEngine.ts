@@ -71,7 +71,17 @@ import {
   joinPath,
   parentPath,
 } from "./storage";
-import { ParentAnchor, deriveParentAnchors } from "./subsystemLinks";
+import {
+  ParentAnchor,
+  deriveParentAnchors,
+  linkPointsToModel,
+  parseSubsystemLink,
+} from "./subsystemLinks";
+import {
+  ChildInterface,
+  isPublicInput,
+  isPublicOutput,
+} from "./publicInterface";
 
 /** Non-variable notes that share a model folder. */
 const SPECIAL_NOTES = new Set(["System.md", "Futures.md", "CLA.md"]);
@@ -631,6 +641,31 @@ export class NativeEngine implements NeoloopyEngine {
       models.filter((m) => m.folder !== folder).map((m) => ({ folder: m.folder, name: m.name })),
       (f) => this.loadNotes(f),
     );
+  }
+
+  async childInterface(folder: string, varId: string): Promise<ChildInterface | null> {
+    const nodes = await this.loadNotes(folder);
+    const anchor = nodes.find((n) => n.id === varId);
+    const raw = (anchor?.subsystem ?? "").trim();
+    if (!raw) return null;
+    const { alias } = parseSubsystemLink(raw);
+    const models = await this.listModels();
+    const match = models.find((m) =>
+      linkPointsToModel(raw, { folder: m.folder, name: m.name }),
+    );
+    if (!match) return null;
+    try {
+      const childNodes = await this.loadNotes(match.folder);
+      const outputs: string[] = [];
+      const inputs: string[] = [];
+      for (const v of childNodes) {
+        if (isPublicOutput(v)) outputs.push(v.label || v.id);
+        if (isPublicInput(v)) inputs.push(v.label || v.id);
+      }
+      return { qualifier: alias ?? match.name, outputs, inputs };
+    } catch {
+      return null;
+    }
   }
 
   // ---- export --------------------------------------------------------------

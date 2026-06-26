@@ -13,6 +13,7 @@ export * from "./engine/engine";
 export * from "./engine/exporters";
 export * from "./engine/analysis";
 export * from "./engine/subsystemLinks";
+export * from "./engine/publicInterface";
 export * from "./engine/loopKey";
 export * from "./engine/loopNote";
 export * from "./engine/noteNaming";
