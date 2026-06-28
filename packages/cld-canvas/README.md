@@ -5,6 +5,10 @@ engine used by neoloopy surfaces, including the Obsidian plugin and web app.
 Pure TypeScript, ESM-only, with no runtime dependency on Obsidian, React, Vue,
 or a server.
 
+![An SIR epidemic causal-loop diagram open on the neoloopy canvas in Obsidian, with the link-editing toolbar visible](https://raw.githubusercontent.com/frozenabe/neoloopy-obsidian/main/screenshots/example-model.png)
+
+<sub>The canvas this package renders — an SIR epidemic model open in Obsidian with the link-editing toolbar.</sub>
+
 **This README is ordered easy → hard** — start at the top with the one-tag React
 drop-in and go only as deep as you need:
 
@@ -462,6 +466,10 @@ import { buildMermaid, render } from "@neoloopy/cld-canvas";
 ```
 
 ## 5. Analysis helpers
+
+![A project-dynamics model — effort, schedule pressure, rework, burnout — showing detected reinforcing and balancing loops alongside the insight panel](https://raw.githubusercontent.com/frozenabe/neoloopy-obsidian/main/screenshots/sample-model.png)
+
+<sub>The same loop detection these helpers expose, surfaced in a neoloopy surface — a project-dynamics model with its reinforcing and balancing loops and the insight panel.</sub>
 
 ```ts
 import { LoopGraph, endogeneity } from "@neoloopy/cld-canvas";
