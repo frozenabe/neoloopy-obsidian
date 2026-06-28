@@ -321,18 +321,20 @@ function drawValve(
   cy: number,
   theme: Theme,
 ): void {
-  // Stock-and-flow valve: two triangles meeting tip-to-tip (a bowtie ▷◁).
-  // Each sub-path must be closed so its outer base edge is drawn — otherwise
-  // the four spokes read as an ✕, not a valve (matches the Dart painter).
+  // Stock-and-flow valve: two triangles meeting tip-to-tip as a vertical
+  // hourglass (⧗) — bases horizontal at top and bottom, apexes pinching at the
+  // center so the horizontal flow line threads the waist. Each sub-path must be
+  // closed so its outer base edge is drawn — otherwise the four spokes read as
+  // an ✕, not a valve (matches the Dart painter).
   ctx.strokeStyle = theme.graphite;
   ctx.lineWidth = 1.5;
   ctx.lineJoin = "round";
   ctx.beginPath();
   ctx.moveTo(cx - 6, cy - 6);
   ctx.lineTo(cx, cy);
-  ctx.lineTo(cx - 6, cy + 6);
+  ctx.lineTo(cx + 6, cy - 6);
   ctx.closePath();
-  ctx.moveTo(cx + 6, cy - 6);
+  ctx.moveTo(cx - 6, cy + 6);
   ctx.lineTo(cx, cy);
   ctx.lineTo(cx + 6, cy + 6);
   ctx.closePath();
@@ -418,8 +420,8 @@ function drawArrow(
   angle: number,
   color: string,
 ): void {
-  const size = 8;
-  const perp = size * 0.55;
+  const size = 12;
+  const perp = size * 0.5;
   const bx = tip.x - Math.cos(angle) * size;
   const by = tip.y - Math.sin(angle) * size;
   const nx = -Math.sin(angle);
