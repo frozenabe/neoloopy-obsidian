@@ -21,7 +21,10 @@ name: Release Obsidian plugin
 on:
   push:
     tags:
-      - "*"
+      # Plugin version tags are bare semver (e.g. 0.1.11). Scope the trigger to
+      # those only so library tags (cld-canvas-v*) never fire this plugin
+      # release workflow and steal the repo's "Latest" release.
+      - "[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
   build:
