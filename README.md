@@ -3,7 +3,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/frozenabe/neoloopy-obsidian?sort=semver&display_name=tag)](https://github.com/frozenabe/neoloopy-obsidian/releases/latest)
 [![Total downloads](https://img.shields.io/github/downloads/frozenabe/neoloopy-obsidian/total)](https://github.com/frozenabe/neoloopy-obsidian/releases)
 [![License: MIT](https://img.shields.io/github/license/frozenabe/neoloopy-obsidian)](LICENSE)
-![Works on desktop](https://img.shields.io/badge/Obsidian-desktop-7c3aed)
+![Obsidian desktop + mobile](https://img.shields.io/badge/Obsidian-desktop%20%2B%20mobile-7c3aed)
 
 > **Think in systems, not lists.** neoloopy turns your vault into a
 > **causal-loop diagramming** tool: map how variables push and pull on each
@@ -81,9 +81,9 @@ thinking already lives.
   recentre on the linking variable.
 - 📤 **Export** a model to **JSON**, **Markdown**, or **Mermaid** with one
   command.
-- 🖥️ **Desktop.** Pure on-device TypeScript. Mobile (iOS/Android) is not
-  supported yet — the canvas isn't usable on touch devices, so the plugin ships
-  desktop-only for now.
+- 🖥️📱 **Desktop and mobile.** Pure on-device TypeScript. The plugin works in
+  Obsidian desktop and mobile (`isDesktopOnly: false`), with current mobile
+  support validated through the WebKit harness used for the iOS touch path.
 
 ## Installation
 

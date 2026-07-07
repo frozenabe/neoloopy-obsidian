@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The plugin release metadata now advertises `0.1.15` to Obsidian mobile through `versions.json`.
+- The README mobile/desktop wording now matches the current mobile-enabled plugin manifest and validation.
 - The local build/test scripts build the shared `@neoloopy/cld-canvas` workspace before plugin validation.
 
 ## [0.1.11] - 2026-06-26
