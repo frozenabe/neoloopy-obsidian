@@ -231,6 +231,10 @@ function makeApp() {
   let active = null;
   const workspace = {
     on: () => ({}),
+    onLayoutReady: (cb) => {
+      setTimeout(() => cb(), 0);
+      return {};
+    },
     getActiveViewOfType: (Ctor) => (active && active instanceof Ctor ? active : null),
     getLeavesOfType: () => (active ? [active.leaf] : []),
     getLeaf: () => new WorkspaceLeaf(app),

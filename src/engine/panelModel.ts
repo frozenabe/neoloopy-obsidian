@@ -8,6 +8,7 @@
  */
 
 import {
+  flowTouches,
   ModelManifest,
   VariableFile,
   Visibility,
@@ -33,11 +34,12 @@ const nameOf = (n: VariableFile): string => n.label || n.id;
 export function stockGoverningFlow(stock: VariableFile, nodes: VariableFile[]): string | undefined {
   if (stock.type !== "stock") return undefined;
   const terms: string[] = [];
+  const byId = new Map(nodes.map((n) => [n.id, n]));
   for (const f of nodes) {
     if (f.type !== "flow") continue;
-    for (const lk of f.links) {
-      if (lk.to !== stock.id) continue;
-      terms.push(`${lk.polarity === "-" ? "−" : "+"} ${nameOf(f)}`);
+    for (const touch of flowTouches(f, byId)) {
+      if (touch.stockId !== stock.id) continue;
+      terms.push(`${touch.sign < 0 ? "−" : "+"} ${nameOf(f)}`);
     }
   }
   return terms.length === 0 ? undefined : terms.join(" ");

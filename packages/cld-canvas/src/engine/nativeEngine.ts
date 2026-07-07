@@ -82,6 +82,17 @@ import {
   isPublicInput,
   isPublicOutput,
 } from "./publicInterface";
+import {
+  SINK_CLOUD,
+  SOURCE_CLOUD,
+  extraWithFlow,
+  extraWithSfdPosition,
+  extraWithoutFlow,
+  flowOf,
+  hasAuthoredSfd,
+  sfdPositionsFor,
+  validateFlowEndpoints,
+} from "./sfd";
 
 /** Non-variable notes that share a model folder. */
 const SPECIAL_NOTES = new Set(["System.md", "Futures.md", "CLA.md"]);
@@ -383,7 +394,13 @@ export class NativeEngine implements NeoloopyEngine {
     if (patch.status !== undefined) next.status = patch.status ?? undefined;
     if (patch.tags !== undefined) next.tags = [...patch.tags];
     if (patch.body !== undefined) next.body = patch.body;
+    if (patch.type !== undefined && patch.type !== "flow" && prev.type === "flow") {
+      next.extra = extraWithoutFlow(next.extra);
+    }
     const out = await this.writeNote(folder, prev, next);
+    if (prev.type === "stock" && patch.type !== undefined && patch.type !== "stock") {
+      await this.detachStockFlowEndpoints(folder, prev.id);
+    }
     await this.touchManifest(folder);
     return out;
   }
@@ -441,24 +458,96 @@ export class NativeEngine implements NeoloopyEngine {
     await this.writeNote(folder, prev, { ...prev, x, y });
   }
 
-  async removeVariable(folder: string, id: string): Promise<void> {
-    // The note is named by its label now, so resolve its real path by id; also
-    // clear any stale id-named copies (a legacy flat note or an old Nodes/<id>.md).
-    const resolved = (await this.noteFilesById(folder)).get(id);
-    if (resolved) await this.storage.remove(resolved);
-    for (const p of [this.notePath(folder, id), this.legacyNotePath(folder, id)]) {
-      if (p !== resolved) await this.storage.remove(p);
-    }
-    // Drop inbound links so loop detection and the manifest stay consistent.
+  async moveVariableSfd(
+    folder: string,
+    id: string,
+    x: number,
+    y: number,
+  ): Promise<void> {
+    const prev = await this.readNote(folder, id);
+    await this.writeNote(folder, prev, {
+      ...prev,
+      extra: extraWithSfdPosition(prev.extra, x, y),
+    });
+  }
+
+  async pinSfdLayout(folder: string): Promise<void> {
     const notes = await this.loadNotes(folder);
+    if (hasAuthoredSfd(notes)) return;
+    const pos = sfdPositionsFor(notes);
     for (const n of notes) {
-      if (n.links.some((l) => l.to === id)) {
+      const p = pos.get(n.id);
+      if (p) {
         await this.writeNote(folder, n, {
           ...n,
-          links: n.links.filter((l) => l.to !== id),
+          extra: extraWithSfdPosition(n.extra, p.x, p.y),
         });
       }
     }
+  }
+
+  async removeVariable(folder: string, id: string): Promise<void> {
+    const notes = await this.loadNotes(folder);
+    const removed = notes.find((n) => n.id === id);
+    const removeIds = new Set([id]);
+
+    if (removed?.type === "stock") {
+      for (const n of notes) {
+        if (n.type !== "flow" || n.id === id) continue;
+        const spec = flowOf(n);
+        if (!spec || (spec.from !== id && spec.to !== id)) continue;
+        const from = spec.from === id ? SOURCE_CLOUD : spec.from;
+        const to = spec.to === id ? SINK_CLOUD : spec.to;
+        if (from === SOURCE_CLOUD && to === SINK_CLOUD) removeIds.add(n.id);
+      }
+    }
+
+    for (const rid of removeIds) await this.removeNoteById(folder, rid);
+
+    // Drop inbound links to removed notes and recloud flow endpoints that touched
+    // a removed stock, so the SFD topology remains valid after deletion.
+    for (const n of notes) {
+      if (removeIds.has(n.id)) continue;
+      let changed = false;
+      const links = n.links.filter((l) => !removeIds.has(l.to));
+      let next: VariableFile = n;
+      if (links.length !== n.links.length) {
+        next = { ...next, links };
+        changed = true;
+      }
+      if (removed?.type === "stock" && n.type === "flow") {
+        const spec = flowOf(n);
+        if (spec && (spec.from === id || spec.to === id)) {
+          next = {
+            ...next,
+            extra: extraWithFlow(next.extra, {
+              from: spec.from === id ? SOURCE_CLOUD : spec.from,
+              to: spec.to === id ? SINK_CLOUD : spec.to,
+            }),
+          };
+          changed = true;
+        }
+      }
+      if (changed) await this.writeNote(folder, n, next);
+    }
+    await this.touchManifest(folder);
+  }
+
+  async setFlowEndpoints(folder: string, flowId: string, from: string, to: string): Promise<void> {
+    const flow = await this.readNote(folder, flowId);
+    if (flow.type !== "flow") throw new Error(`Flow endpoints apply to flow variables only: ${flow.label || flow.id}`);
+    const notes = await this.loadNotes(folder);
+    const byId = new Map(notes.map((n) => [n.id, n]));
+    const check = validateFlowEndpoints(from, to, byId);
+    if (!check.ok) throw new Error(check.error);
+    const next: VariableFile = {
+      ...flow,
+      extra: extraWithFlow(flow.extra, { from, to }),
+      // Once the pipe is explicit, legacy flow->stock links become redundant
+      // material edges. Preserve all remaining information connectors.
+      links: flow.links.filter((l) => byId.get(l.to)?.type !== "stock"),
+    };
+    await this.writeNote(folder, flow, next);
     await this.touchManifest(folder);
   }
 
@@ -698,6 +787,38 @@ export class NativeEngine implements NeoloopyEngine {
     // the canonical id-named path for an id that isn't on disk yet.
     const path = (await this.noteFilesById(folder)).get(id) ?? this.notePath(folder, id);
     return parseNote(await this.storage.read(path), this.yaml, id);
+  }
+
+  private async removeNoteById(folder: string, id: string): Promise<void> {
+    const resolved = (await this.noteFilesById(folder)).get(id);
+    if (resolved) await this.storage.remove(resolved);
+    for (const p of [this.notePath(folder, id), this.legacyNotePath(folder, id)]) {
+      if (p !== resolved) await this.storage.remove(p);
+    }
+  }
+
+  private async detachStockFlowEndpoints(folder: string, stockId: string): Promise<void> {
+    const notes = await this.loadNotes(folder);
+    const removeIds = new Set<string>();
+    for (const n of notes) {
+      if (n.type !== "flow") continue;
+      const spec = flowOf(n);
+      if (!spec || (spec.from !== stockId && spec.to !== stockId)) continue;
+      const from = spec.from === stockId ? SOURCE_CLOUD : spec.from;
+      const to = spec.to === stockId ? SINK_CLOUD : spec.to;
+      if (from === SOURCE_CLOUD && to === SINK_CLOUD) {
+        removeIds.add(n.id);
+      } else {
+        await this.writeNote(folder, n, { ...n, extra: extraWithFlow(n.extra, { from, to }) });
+      }
+    }
+    if (removeIds.size === 0) return;
+    for (const id of removeIds) await this.removeNoteById(folder, id);
+    for (const n of notes) {
+      if (removeIds.has(n.id)) continue;
+      const links = n.links.filter((l) => !removeIds.has(l.to));
+      if (links.length !== n.links.length) await this.writeNote(folder, n, { ...n, links });
+    }
   }
 
   private async writeNote(
@@ -1167,10 +1288,18 @@ function remapVariableIds(
   v: VariableFile,
   idMap: Map<string, string>,
 ): VariableFile {
+  const flow = flowOf(v);
+  const extra = flow
+    ? extraWithFlow(v.extra, {
+        from: idMap.get(flow.from) ?? flow.from,
+        to: idMap.get(flow.to) ?? flow.to,
+      })
+    : v.extra;
   return {
     ...v,
     id: idMap.get(v.id) ?? v.id,
     links: v.links.map((l) => ({ ...l, to: idMap.get(l.to) ?? l.to })),
+    extra,
   };
 }
 

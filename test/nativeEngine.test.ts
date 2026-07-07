@@ -4,6 +4,8 @@ import {
   LoopType,
   MemoryStorage,
   NativeEngine,
+  SINK_CLOUD,
+  SOURCE_CLOUD,
   baseName,
   joinPath,
   parseLoopNote,
@@ -212,6 +214,55 @@ describe("NativeEngine — variables and links", () => {
     const updated = await engine.updateVariable(folder, v.id, { label: "B", body: "note" });
     expect(updated.label).toBe("B");
     expect(updated.rev).toBe(v.rev + 1);
+  });
+});
+
+describe("NativeEngine — SFD topology", () => {
+  it("writes explicit flow endpoints and prunes redundant flow-to-stock material links", async () => {
+    const { engine } = makeEngine();
+    const { folder } = await engine.createModel("SFD");
+    const stock = await engine.addVariable(folder, { label: "Population", type: "stock" });
+    const aux = await engine.addVariable(folder, { label: "Birth pressure" });
+    const flow = await engine.addVariable(folder, { label: "Births", type: "flow" });
+    await engine.addLink(folder, flow.id, stock.id, { polarity: "+" });
+    await engine.addLink(folder, flow.id, aux.id, { polarity: "+" });
+
+    await engine.setFlowEndpoints(folder, flow.id, SOURCE_CLOUD, stock.id);
+    const node = (await engine.loadGraph(folder)).nodes.find((n) => n.id === flow.id)!;
+    expect(node.extra.flow).toEqual({ from: SOURCE_CLOUD, to: stock.id });
+    expect(node.links.map((l) => l.to)).toEqual([aux.id]);
+  });
+
+  it("rejects endpoints that are not stock-or-cloud", async () => {
+    const { engine } = makeEngine();
+    const { folder } = await engine.createModel("SFD");
+    const aux = await engine.addVariable(folder, { label: "Aux" });
+    const flow = await engine.addVariable(folder, { label: "Flow", type: "flow" });
+    await expect(engine.setFlowEndpoints(folder, flow.id, aux.id, SINK_CLOUD)).rejects.toThrow(/stock/i);
+  });
+
+  it("writes sfd positions separately from CLD x/y", async () => {
+    const { engine } = makeEngine();
+    const { folder } = await engine.createModel("SFD");
+    const stock = await engine.addVariable(folder, { label: "Population", type: "stock", x: 10, y: 20 });
+    await engine.moveVariableSfd(folder, stock.id, 300, 400);
+    const node = (await engine.loadGraph(folder)).nodes.find((n) => n.id === stock.id)!;
+    expect(node.x).toBe(10);
+    expect(node.y).toBe(20);
+    expect(node.extra.sfd).toEqual({ x: 300, y: 400 });
+  });
+
+  it("reclouds flow endpoints when a connected stock is removed", async () => {
+    const { engine } = makeEngine();
+    const { folder } = await engine.createModel("SFD");
+    const a = await engine.addVariable(folder, { label: "A", type: "stock" });
+    const b = await engine.addVariable(folder, { label: "B", type: "stock" });
+    const f = await engine.addVariable(folder, { label: "Transfer", type: "flow" });
+    await engine.setFlowEndpoints(folder, f.id, a.id, b.id);
+
+    await engine.removeVariable(folder, a.id);
+    const flow = (await engine.loadGraph(folder)).nodes.find((n) => n.id === f.id)!;
+    expect(flow.extra.flow).toEqual({ from: SOURCE_CLOUD, to: b.id });
   });
 });
 

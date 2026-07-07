@@ -177,7 +177,18 @@ export interface NeoloopyEngine {
   ): Promise<VariableFile>;
   /** Cosmetic position change — never bumps rev/modified. */
   moveVariable(folder: string, id: string, x: number, y: number): Promise<void>;
+  /** Cosmetic SFD-view position change (`extra.sfd`) — never bumps rev/modified. */
+  moveVariableSfd(folder: string, id: string, x: number, y: number): Promise<void>;
+  /**
+   * If a model has no authored SFD coordinates, persist the deterministic SFD
+   * fallback positions into `extra.sfd` so the first manual SFD edit does not
+   * make the diagram jump back to CLD coordinates.
+   */
+  pinSfdLayout(folder: string): Promise<void>;
   removeVariable(folder: string, id: string): Promise<void>;
+
+  /** Validated SFD material topology write for a flow note (`extra.flow`). */
+  setFlowEndpoints(folder: string, flowId: string, from: string, to: string): Promise<void>;
 
   /**
    * Link (or clear, with `child=null`) a node's subsystem anchor — the same

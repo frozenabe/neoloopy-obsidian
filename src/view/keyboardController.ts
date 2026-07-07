@@ -40,7 +40,8 @@ export interface KeyboardHost {
   /** Reset the fit + re-fit the camera to the whole model (the `0` key). */
   fitToContent(): void;
   createNodeAt(world: Point): Promise<void>;
-  createLink(from: string, to: string): Promise<void>;
+  createConnection(from: string, to: string | null, at: Point): Promise<string | null>;
+  previewNodePosition(id: string, x: number, y: number): void;
   persistNodePosition(id: string, x: number, y: number): Promise<void>;
   deleteSelection(): Promise<void>;
 }
@@ -253,8 +254,9 @@ export class KeyboardController {
       const to = sel.node;
       this.clearLink();
       if (to && to !== from && this.host.hasFolder()) {
-        await this.host.createLink(from, to);
-        this.host.select(to, null, null);
+        const at = this.centerOf(to);
+        const next = await this.host.createConnection(from, to, at ?? { x: 0, y: 0 });
+        if (next) this.host.select(next, null, null);
       }
       this.host.render();
       return;
@@ -291,9 +293,10 @@ export class KeyboardController {
     if (sel.node && graph) {
       const node = graph.nodes.find((n) => n.id === sel.node);
       if (!node) return;
+      const current = this.centerOf(node.id);
+      if (!current) return;
       const step = big ? 40 : 8;
-      node.x += dx * step;
-      node.y += dy * step;
+      this.host.previewNodePosition(node.id, current.x + dx * step, current.y + dy * step);
       this.host.rebuildScene();
       this.host.render();
       this.scheduleNudgeSave(node.id);
@@ -309,8 +312,8 @@ export class KeyboardController {
     if (this.nudgeSaveTimer !== null) window.clearTimeout(this.nudgeSaveTimer);
     this.nudgeSaveTimer = window.setTimeout(() => {
       this.nudgeSaveTimer = null;
-      const node = this.host.graph()?.nodes.find((n) => n.id === id);
-      if (node) void this.host.persistNodePosition(id, node.x, node.y);
+      const pos = this.centerOf(id);
+      if (pos) void this.host.persistNodePosition(id, pos.x, pos.y);
     }, 450);
   }
 

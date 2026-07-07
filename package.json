@@ -1,17 +1,17 @@
 {
   "name": "neoloopy-obsidian",
-  "version": "0.1.11",
+  "version": "0.1.15",
   "description": "neoloopy Obsidian plugin — local-first causal-loop diagrams",
   "main": "main.js",
   "type": "module",
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "typecheck": "tsc -noEmit -skipLibCheck",
+    "build": "npm run build --workspace @neoloopy/cld-canvas && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "typecheck": "npm run build --workspace @neoloopy/cld-canvas && tsc -noEmit -skipLibCheck",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "npm run build --workspace @neoloopy/cld-canvas && vitest run",
     "smoke": "npm run build && node test/smoke/smoke.cjs && node test/smoke/view-smoke.cjs",
-    "test:ios": "node test/webkit/canvas-harness.mjs"
+    "test:ios": "npm run build --workspace @neoloopy/cld-canvas && node test/webkit/canvas-harness.mjs"
   },
   "keywords": [
     "obsidian",
@@ -22,7 +22,9 @@
   ],
   "author": "neoloopy",
   "license": "MIT",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "dependencies": {
     "@neoloopy/cld-canvas": "*"
   },

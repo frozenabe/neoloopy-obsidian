@@ -8,7 +8,15 @@
  */
 
 import { DetectedLoop, VariableFile, VaultLink } from "../engine/types";
+import {
+  isCloud,
+  isMaterialLink,
+  resolveFlowSpec,
+  sfdPositionsFor,
+} from "../engine/sfd";
 import { Bounds, Point } from "./camera";
+
+export type DiagramViewMode = "cld" | "sfd";
 
 export interface NodeBox {
   id: string;
@@ -38,6 +46,19 @@ export interface EdgeGeom extends EdgeRef {
   arrowAngle: number;
 }
 
+export interface SfdPipeGeom {
+  id: string;
+  flowId: string;
+  from: string;
+  to: string;
+  fromPoint: Point;
+  valvePoint: Point;
+  toPoint: Point;
+  fromCloud: Point | null;
+  toCloud: Point | null;
+  axisAngle: number;
+}
+
 /**
  * Node (x,y) is the box center, matching the Dart painter + autoLayout.
  *
@@ -51,6 +72,7 @@ export interface EdgeGeom extends EdgeRef {
 export function buildNodeBoxes(
   nodes: VariableFile[],
   measure?: (label: string) => number,
+  positions?: Map<string, Point>,
 ): Map<string, NodeBox> {
   const m = new Map<string, NodeBox>();
   for (const n of nodes) {
@@ -59,7 +81,8 @@ export function buildNodeBoxes(
     const extra = n.type === "flow" ? 40 : 36;
     const textW = measure ? measure(label) : label.length * 7.2;
     const w = Math.max(60, textW + extra);
-    m.set(n.id, { id: n.id, cx: n.x, cy: n.y, w, h, type: n.type });
+    const p = positions?.get(n.id) ?? n;
+    m.set(n.id, { id: n.id, cx: p.x, cy: p.y, w, h, type: n.type });
   }
   return m;
 }
@@ -72,6 +95,67 @@ export function collectEdges(nodes: VariableFile[]): EdgeRef[] {
     }
   }
   return out;
+}
+
+export function collectInfoEdges(nodes: VariableFile[], mode: DiagramViewMode): EdgeRef[] {
+  if (mode === "cld") return collectEdges(nodes);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const out: EdgeRef[] = [];
+  for (const n of nodes) {
+    for (const l of n.links) {
+      if (isMaterialLink(n, l, byId)) continue;
+      out.push({ id: `${n.id}__${l.to}`, source: n.id, target: l.to, link: l });
+    }
+  }
+  return out;
+}
+
+export function sfdRenderPositions(nodes: VariableFile[]): Map<string, Point> {
+  return sfdPositionsFor(nodes);
+}
+
+export function buildSfdPipeGeoms(nodes: VariableFile[], boxes: Map<string, NodeBox>): SfdPipeGeom[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const out: SfdPipeGeom[] = [];
+  for (const flow of nodes) {
+    if (flow.type !== "flow") continue;
+    const spec = resolveFlowSpec(flow, byId);
+    if (!spec) continue;
+    const valveBox = boxes.get(flow.id);
+    if (!valveBox) continue;
+    const valvePoint = { x: valveBox.cx, y: valveBox.cy };
+    const fromStock = !isCloud(spec.from) && byId.get(spec.from)?.type === "stock" ? boxes.get(spec.from) : undefined;
+    const toStock = !isCloud(spec.to) && byId.get(spec.to)?.type === "stock" ? boxes.get(spec.to) : undefined;
+    const fromReal = fromStock ? { x: fromStock.cx, y: fromStock.cy } : null;
+    const toReal = toStock ? { x: toStock.cx, y: toStock.cy } : null;
+    const fromCloud = fromStock ? null : awayCloud(valvePoint, toReal, -1);
+    const toCloud = toStock ? null : awayCloud(valvePoint, fromReal, 1);
+    const fromPoint = fromStock ? rimPoint(fromStock, valvePoint) : fromCloud as Point;
+    const toPoint = toStock ? rimPoint(toStock, valvePoint) : toCloud as Point;
+    out.push({
+      id: `pipe__${flow.id}`,
+      flowId: flow.id,
+      from: spec.from,
+      to: spec.to,
+      fromPoint,
+      valvePoint,
+      toPoint,
+      fromCloud,
+      toCloud,
+      axisAngle: Math.atan2(toPoint.y - fromPoint.y, toPoint.x - fromPoint.x),
+    });
+  }
+  return out;
+}
+
+function awayCloud(flow: Point, other: Point | null, sign: number): Point {
+  if (other) {
+    const dx = flow.x - other.x;
+    const dy = flow.y - other.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: flow.x + (dx / len) * 80, y: flow.y + (dy / len) * 80 };
+  }
+  return { x: flow.x + sign * 80, y: flow.y };
 }
 
 /**
@@ -473,6 +557,27 @@ export function nodeBounds(boxes: Map<string, NodeBox>): Bounds {
     minY = Math.min(minY, b.cy - b.h / 2);
     maxX = Math.max(maxX, b.cx + b.w / 2);
     maxY = Math.max(maxY, b.cy + b.h / 2);
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+export function sceneBounds(boxes: Map<string, NodeBox>, pipes: SfdPipeGeom[] = []): Bounds {
+  const bb = nodeBounds(boxes);
+  let { minX, minY, maxX, maxY } = bb;
+  for (const pipe of pipes) {
+    for (const p of [
+      pipe.fromPoint,
+      pipe.valvePoint,
+      pipe.toPoint,
+      pipe.fromCloud,
+      pipe.toCloud,
+    ]) {
+      if (!p) continue;
+      minX = Math.min(minX, p.x - 24);
+      minY = Math.min(minY, p.y - 18);
+      maxX = Math.max(maxX, p.x + 24);
+      maxY = Math.max(maxY, p.y + 18);
+    }
   }
   return { minX, minY, maxX, maxY };
 }

@@ -9,6 +9,7 @@
 
 import { setIcon } from "obsidian";
 import {
+  DiagramViewMode,
   EndogeneityResult,
   GraphView,
   LoopType,
@@ -16,12 +17,21 @@ import {
   endogeneity,
 } from "@neoloopy/cld-canvas";
 import { RefModeRow, referenceModeRows } from "../engine/panelModel";
+import {
+  INSIGHT_DESTINATIONS,
+  HealthCheck,
+  InsightDestination,
+  modelHealthChecks,
+  resolveInsightDestination,
+} from "../engine/insightsModel";
 
 /** What the panel needs from the canvas. Kept to reads + one selection command. */
 export interface InsightHost {
   /** Whether the panel is open (settings.insightPanelOpen). */
   isOpen(): boolean;
   graph(): GraphView | null;
+  diagramMode(): DiagramViewMode;
+  setDiagramMode(mode: DiagramViewMode): void;
   selectedLoop(): string | null;
   /** Select a loop (or clear with null) and repaint the canvas. */
   selectLoop(key: string | null): void;
@@ -36,6 +46,7 @@ export interface InsightHost {
 }
 
 export class InsightPanel {
+  private active: InsightDestination = "structure";
   // Memo of the two pure analyses, keyed by graph-object identity. The panel
   // re-renders on every selection change with the *same* graph object, while a
   // graph reload always yields a fresh object — so identity is the cheapest
@@ -43,6 +54,9 @@ export class InsightPanel {
   private memoGraph: GraphView | null = null;
   private memoEndogeneity: EndogeneityResult | null = null;
   private memoRefModes: RefModeRow[] | null = null;
+  private healthGraph: GraphView | null = null;
+  private healthChecks: HealthCheck[] | null = null;
+  private healthCheckedAt = "";
 
   constructor(
     private readonly root: HTMLElement,
@@ -68,6 +82,7 @@ export class InsightPanel {
     const head = p.createDiv({ cls: "neoloopy-ip-head" });
     head.createSpan({ cls: "neoloopy-ip-title", text: "Insights" });
     if (g?.quant) head.createSpan({ cls: "neoloopy-ip-quant-pill", text: "Quant" });
+    this.renderDiagramToggle(head);
     head.createSpan({
       cls: "neoloopy-ip-count",
       text: g ? `${g.loops.length} loop${g.loops.length === 1 ? "" : "s"}` : "",
@@ -78,11 +93,11 @@ export class InsightPanel {
       return;
     }
 
-    this.renderSystem(p);
-    this.renderParents(p);
-    this.renderLoops(p, g);
-    this.renderStructure(p, g);
-    this.renderReferenceModes(p, g);
+    this.active = resolveInsightDestination(this.active);
+    const shell = p.createDiv({ cls: "neoloopy-ip-shell" });
+    this.renderRail(shell);
+    const body = shell.createDiv({ cls: "neoloopy-ip-body" });
+    this.renderDestination(body, g, this.active);
   }
 
   private nameOf(g: GraphView, id: string): string {
@@ -94,6 +109,67 @@ export class InsightPanel {
     const sec = parent.createDiv({ cls: "neoloopy-ip-section" });
     sec.createDiv({ cls: "neoloopy-ip-label", text: title });
     return sec;
+  }
+
+  private renderDiagramToggle(parent: HTMLElement): void {
+    const wrap = parent.createDiv({ cls: "neoloopy-ip-view-toggle" });
+    for (const [mode, label] of [["cld", "CLD"], ["sfd", "SFD"]] as const) {
+      const btn = wrap.createEl("button", { cls: "neoloopy-ip-view-btn", text: label });
+      btn.toggleClass("is-active", this.host.diagramMode() === mode);
+      btn.setAttribute("aria-pressed", this.host.diagramMode() === mode ? "true" : "false");
+      this.host.listen(btn, "click", () => this.host.setDiagramMode(mode));
+    }
+  }
+
+  private renderRail(parent: HTMLElement): void {
+    const rail = parent.createDiv({ cls: "neoloopy-ip-rail" });
+    const icon: Record<InsightDestination, string> = {
+      structure: "git-fork",
+      loops: "repeat-2",
+      docs: "file-text",
+      health: "shield-check",
+    };
+    const label: Record<InsightDestination, string> = {
+      structure: "Structure",
+      loops: "Loops",
+      docs: "Docs",
+      health: "Health",
+    };
+    for (const d of INSIGHT_DESTINATIONS) {
+      const btn = rail.createEl("button", {
+        cls: `neoloopy-ip-rail-btn${this.active === d ? " is-active" : ""}`,
+        attr: {
+          type: "button",
+          title: label[d],
+          "aria-label": label[d],
+          "aria-pressed": this.active === d ? "true" : "false",
+        },
+      });
+      setIcon(btn, icon[d]);
+      this.host.listen(btn, "click", () => {
+        this.active = d;
+        this.render();
+      });
+    }
+  }
+
+  private renderDestination(parent: HTMLElement, g: GraphView, d: InsightDestination): void {
+    switch (d) {
+      case "structure":
+        this.renderStructure(parent, g);
+        return;
+      case "loops":
+        this.renderLoops(parent, g);
+        return;
+      case "docs":
+        this.renderSystem(parent);
+        this.renderParents(parent);
+        this.renderReferenceModes(parent, g);
+        return;
+      case "health":
+        this.renderHealth(parent, g);
+        return;
+    }
   }
 
   private renderSystem(parent: HTMLElement): void {
@@ -125,9 +201,12 @@ export class InsightPanel {
 
   private renderLoops(parent: HTMLElement, g: GraphView): void {
     const loops = g.loops;
-    if (loops.length === 0) return;
     const selected = this.host.selectedLoop();
-    const sec = this.section(parent, "Feedback loops");
+    const sec = this.section(parent, "Loops");
+    if (loops.length === 0) {
+      sec.createDiv({ cls: "neoloopy-ip-stat is-muted", text: "No feedback loops detected." });
+      return;
+    }
     for (const l of loops) {
       const label = g.labels.get(l.key) ?? "?";
       const reinforcing = l.type === LoopType.reinforcing;
@@ -165,18 +244,63 @@ export class InsightPanel {
         text: `${r.openLoop.length} variable${r.openLoop.length === 1 ? "" : "s"} outside every loop`,
       });
     }
+    const stocks = g.nodes.filter((n) => n.type === "stock").length;
+    const flows = g.nodes.filter((n) => n.type === "flow").length;
+    if (stocks > 0 || flows > 0) {
+      sec.createDiv({
+        cls: "neoloopy-ip-stat",
+        text: `SFD structure: ${stocks} stock${stocks === 1 ? "" : "s"} · ${flows} flow${flows === 1 ? "" : "s"}`,
+      });
+    }
   }
 
   private renderReferenceModes(parent: HTMLElement, g: GraphView): void {
     const rows = this.analysisFor(g).refModes;
-    if (rows.length === 0) return;
     const sec = this.section(parent, "Reference modes");
+    if (rows.length === 0) {
+      sec.createDiv({ cls: "neoloopy-ip-stat is-muted", text: "No reference modes authored." });
+      return;
+    }
     for (const r of rows) {
       const row = sec.createDiv({ cls: "neoloopy-ip-ref-row" });
       this.sparkline(row, r.series);
       const txt = row.createDiv({ cls: "neoloopy-ip-ref-text" });
       txt.createSpan({ cls: "neoloopy-ip-ref-var", text: r.variable });
       txt.createSpan({ cls: "neoloopy-ip-ref-note", text: r.label });
+    }
+  }
+
+  private renderHealth(parent: HTMLElement, g: GraphView): void {
+    const sec = this.section(parent, "Health");
+    const actions = sec.createDiv({ cls: "neoloopy-ip-health-actions" });
+    const run = actions.createEl("button", {
+      cls: "neoloopy-ip-health-run",
+      text: "Run checks",
+      attr: { type: "button" },
+    });
+    this.host.listen(run, "click", () => {
+      this.healthGraph = g;
+      this.healthChecks = modelHealthChecks(g);
+      this.healthCheckedAt = new Date().toLocaleTimeString();
+      this.render();
+    });
+
+    const checks = this.healthGraph === g ? this.healthChecks : null;
+    if (!checks) {
+      sec.createDiv({
+        cls: "neoloopy-ip-stat is-muted",
+        text: "Run local checks for structure, labels, and flow endpoints.",
+      });
+      return;
+    }
+
+    if (this.healthCheckedAt) {
+      sec.createDiv({ cls: "neoloopy-ip-health-stamp", text: `Checked ${this.healthCheckedAt}` });
+    }
+    for (const check of checks) {
+      const row = sec.createDiv({ cls: `neoloopy-ip-health is-${check.severity}` });
+      row.createDiv({ cls: "neoloopy-ip-health-label", text: check.label });
+      row.createDiv({ cls: "neoloopy-ip-health-detail", text: check.detail });
     }
   }
 

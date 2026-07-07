@@ -14,12 +14,16 @@
 import { setIcon } from "obsidian";
 import {
   Camera,
+  DiagramViewMode,
   EdgeGeom,
   GROUP_PALETTE,
   GraphView,
   LinkPatch,
+  SINK_CLOUD,
   Scene,
+  SOURCE_CLOUD,
   VarType,
+  flowOf,
 } from "@neoloopy/cld-canvas";
 import { LoopLike } from "./loopKeys";
 
@@ -28,6 +32,7 @@ export interface ChromeHost {
   readonly camera: Camera;
   scene(): Scene | null;
   graph(): GraphView | null;
+  diagramMode(): DiagramViewMode;
   selection(): { node: string | null; edge: string | null; loop: string | null };
   /** True only when no drag/pan gesture is in flight (chrome hides mid-gesture). */
   isIdle(): boolean;
@@ -37,6 +42,7 @@ export interface ChromeHost {
   listen(el: HTMLElement, type: string, cb: (e: Event) => void): void;
 
   setNodeType(id: string, type: VarType): void;
+  setFlowEndpoints(id: string, from: string, to: string): void;
   setNodeGroup(id: string, group: string | null): void;
   openSubsystemMenu(ev: MouseEvent): void;
   openEquationModal(): void;
@@ -65,6 +71,9 @@ export class SelectionChrome {
   private readonly nodeTypeBtns: Partial<Record<VarType, HTMLElement>> = {};
   private readonly subsysBtn: HTMLElement;
   private readonly fxBtn: HTMLElement;
+  private readonly flowEndpointEl: HTMLElement;
+  private readonly flowFromSelect: HTMLSelectElement;
+  private readonly flowToSelect: HTMLSelectElement;
   private readonly paletteBtns: Record<string, HTMLElement> = {};
   private readonly edgePolBtns: Partial<Record<"+" | "-", HTMLElement>> = {};
   private readonly edgeFlagBtns: Partial<
@@ -108,6 +117,12 @@ export class SelectionChrome {
     this.fxBtn = row.createEl("button", { cls: "neoloopy-circ neoloopy-fx", text: "ƒx" });
     this.fxBtn.setAttribute("aria-label", "Equation");
     host.listen(this.fxBtn, "click", () => host.openEquationModal());
+
+    this.flowEndpointEl = this.nodeMenu.createDiv({ cls: "neoloopy-flow-endpoints" });
+    this.flowFromSelect = this.endpointField(this.flowEndpointEl, "From");
+    this.flowToSelect = this.endpointField(this.flowEndpointEl, "To");
+    host.listen(this.flowFromSelect, "change", () => this.commitEndpointChange());
+    host.listen(this.flowToSelect, "change", () => this.commitEndpointChange());
 
     // Color palette: a no-group swatch + the eight curated group hues.
     const palette = this.nodeMenu.createDiv({ cls: "neoloopy-pill neoloopy-palette" });
@@ -244,6 +259,7 @@ export class SelectionChrome {
           btn.toggleClass("is-active", name === grp);
         this.subsysBtn.toggleClass("is-active", !!(node?.subsystem && node.subsystem.trim().length));
         this.fxBtn.toggleClass("is-hidden", !graph?.quant);
+        this.syncFlowEndpointEditor(node ?? null, graph ?? null);
         this.nodeMenu.toggleClass("is-visible", true);
       } else this.nodeMenu.toggleClass("is-visible", false);
     } else {
@@ -307,6 +323,51 @@ export class SelectionChrome {
       setIcon(el, want);
       this.toggleIcons[key] = want;
     }
+  }
+
+  private endpointField(parent: HTMLElement, label: string): HTMLSelectElement {
+    const wrap = parent.createDiv({ cls: "neoloopy-flow-endpoint-field" });
+    wrap.createSpan({ cls: "neoloopy-flow-endpoint-label", text: label });
+    return wrap.createEl("select", { cls: "neoloopy-flow-endpoint-select" });
+  }
+
+  private commitEndpointChange(): void {
+    const id = this.host.selection().node;
+    if (!id) return;
+    this.host.setFlowEndpoints(id, this.flowFromSelect.value, this.flowToSelect.value);
+  }
+
+  private syncFlowEndpointEditor(node: { type: VarType; extra: Record<string, unknown> } | null, graph: GraphView | null): void {
+    const show = this.host.diagramMode() === "sfd" && node?.type === "flow" && !!graph;
+    this.flowEndpointEl.toggleClass("is-hidden", !show);
+    if (!show || !graph) return;
+    const flow = flowOf(node as GraphView["nodes"][number]);
+    const stocks = graph.nodes
+      .filter((n) => n.type === "stock")
+      .slice()
+      .sort((a, b) => (a.label || a.id).localeCompare(b.label || b.id));
+    this.setEndpointOptions(this.flowFromSelect, [
+      [SOURCE_CLOUD, "Source"],
+      ...stocks.map((s): [string, string] => [s.id, s.label || s.id]),
+    ], flow?.from ?? SOURCE_CLOUD);
+    this.setEndpointOptions(this.flowToSelect, [
+      ...stocks.map((s): [string, string] => [s.id, s.label || s.id]),
+      [SINK_CLOUD, "Sink"],
+    ], flow?.to ?? SINK_CLOUD);
+  }
+
+  private setEndpointOptions(select: HTMLSelectElement, items: Array<[string, string]>, value: string): void {
+    const present = items.some(([v]) => v === value);
+    const all = present ? items : [[value, value], ...items] as Array<[string, string]>;
+    const sig = all.map(([v, label]) => `${v}\u001f${label}`).join("\u001e");
+    if (select.dataset["sig"] !== sig) {
+      select.empty();
+      for (const [v, label] of all) {
+        select.createEl("option", { value: v, text: label });
+      }
+      select.dataset["sig"] = sig;
+    }
+    select.value = value;
   }
 
   /** Append a node-kind shape icon (stock rect · flow valve · aux pill). */

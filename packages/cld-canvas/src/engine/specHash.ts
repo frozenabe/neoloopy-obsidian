@@ -15,6 +15,7 @@
  */
 
 import { VariableFile, VaultLink, varTypeName } from "./types";
+import { flowOf } from "./sfd";
 
 /** Provenance value stored in a note's `source` key for plugin writes. */
 export const WRITE_SOURCE_PLUGIN = "plugin";
@@ -40,6 +41,7 @@ export function fnv1a32(s: string): string {
 export function canonicalContent(v: VariableFile): string {
   const tags = [...v.tags].sort();
   const links = [...v.links].sort((a, b) => (a.to < b.to ? -1 : a.to > b.to ? 1 : 0));
+  const flow = flowOf(v);
   const linkPart = (l: VaultLink): string => {
     const base = `${l.to}|${l.polarity}|${l.delay ? 1 : 0}|${l.indirect ? 1 : 0}|${l.nonlinear ? 1 : 0}`;
     const conf = l.confidence !== undefined ? `|c${l.confidence.toFixed(3)}` : "";
@@ -58,6 +60,7 @@ export function canonicalContent(v: VariableFile): string {
     ...links.map(linkPart),
     v.body.trim(),
   ];
+  if (flow) parts.push(`flow:${flow.from}->${flow.to}`);
   if ((v.shared ?? "").length > 0) parts.push(v.shared as string);
   return parts.join("\n");
 }

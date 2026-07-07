@@ -8,7 +8,7 @@
  */
 
 import { App, ButtonComponent, DropdownComponent } from "obsidian";
-import { ModelRef } from "@neoloopy/cld-canvas";
+import { DiagramViewMode, ModelRef } from "@neoloopy/cld-canvas";
 import { GlossaryModal, ShortcutsModal } from "./dialogs";
 
 /** What the toolbar needs from the canvas. */
@@ -19,6 +19,8 @@ export interface ToolbarHost {
   openModel(folder: string): void;
   newModel(): void;
   renameModel(): void;
+  diagramMode(): DiagramViewMode;
+  setDiagramMode(mode: DiagramViewMode): void;
   tidy(): void;
   openExportMenu(evt: MouseEvent): void;
   toggleInsightPanel(): void;
@@ -26,6 +28,7 @@ export interface ToolbarHost {
 
 export class CanvasToolbar {
   private readonly dropdown: DropdownComponent;
+  private readonly modeButtons = new Map<DiagramViewMode, HTMLButtonElement>();
 
   constructor(root: HTMLElement, private readonly host: ToolbarHost) {
     const bar = root.createDiv({ cls: "neoloopy-toolbar" });
@@ -51,6 +54,18 @@ export class CanvasToolbar {
       .onClick(() => host.renameModel())
       .buttonEl.addClass("neoloopy-rename-model");
 
+    const modeToggle = bar.createDiv({ cls: "neoloopy-toolbar-view-toggle" });
+    for (const [mode, label] of [["cld", "CLD"], ["sfd", "SFD"]] as const) {
+      const btn = modeToggle.createEl("button", {
+        cls: "neoloopy-toolbar-view-btn",
+        text: label,
+        attr: { type: "button" },
+      });
+      btn.addEventListener("click", () => host.setDiagramMode(mode));
+      this.modeButtons.set(mode, btn);
+    }
+    this.setDiagramMode(host.diagramMode());
+
     bar.createDiv({ cls: "neoloopy-toolbar-spacer" });
 
     // Right cluster: four action buttons, identical to the native canvas header.
@@ -73,6 +88,14 @@ export class CanvasToolbar {
   /** Reflect the active model in the dropdown without firing `onChange`. */
   setSelected(folder: string): void {
     this.dropdown.setValue(folder);
+  }
+
+  setDiagramMode(mode: DiagramViewMode): void {
+    for (const [key, btn] of this.modeButtons) {
+      const active = key === mode;
+      btn.toggleClass("is-active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    }
   }
 
   /**

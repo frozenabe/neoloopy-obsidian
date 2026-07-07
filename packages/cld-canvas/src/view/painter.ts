@@ -11,13 +11,15 @@
 
 import { Camera, Point } from "./camera";
 import { Theme, groupSwatch, swatchBorder, swatchFill, swatchInk, withAlpha } from "./theme";
-import { EdgeGeom, NodeBox } from "./geometry";
+import { DiagramViewMode, EdgeGeom, NodeBox, SfdPipeGeom } from "./geometry";
 import { DetectedLoop, LoopType, VariableFile } from "../engine/types";
 
 export interface Scene {
+  mode: DiagramViewMode;
   nodes: VariableFile[];
   boxes: Map<string, NodeBox>;
   edges: EdgeGeom[];
+  pipes: SfdPipeGeom[];
   loops: DetectedLoop[];
   labels: Map<string, string>;
   badges: Map<string, Point>;
@@ -86,23 +88,26 @@ export function paint(
   ctx.translate(camera.tx, camera.ty);
   ctx.scale(camera.scale, camera.scale);
 
-  const hl = ui.loopHighlight;
-  for (const g of scene.edges) {
-    drawEdge(ctx, g, theme, g.id === ui.selectedEdgeId, hl, ui.flowPhase);
-  }
-  for (const n of scene.nodes) {
-    const box = scene.boxes.get(n.id);
-    if (box) {
-      drawNode(
-        ctx,
-        box,
-        n,
-        theme,
-        n.id === ui.selectedNodeId,
-        ui.liveNodeIds.has(n.id),
-        hl ? !hl.nodeIds.has(n.id) : false,
-        n.id === ui.selectedNodeId ? ui.pulsePhase : 0,
-      );
+  const hl = scene.mode === "cld" ? ui.loopHighlight : null;
+  if (scene.mode === "sfd") paintSfd(ctx, scene, theme, ui);
+  else {
+    for (const g of scene.edges) {
+      drawEdge(ctx, g, theme, g.id === ui.selectedEdgeId, hl, ui.flowPhase);
+    }
+    for (const n of scene.nodes) {
+      const box = scene.boxes.get(n.id);
+      if (box) {
+        drawNode(
+          ctx,
+          box,
+          n,
+          theme,
+          n.id === ui.selectedNodeId,
+          ui.liveNodeIds.has(n.id),
+          hl ? !hl.nodeIds.has(n.id) : false,
+          n.id === ui.selectedNodeId ? ui.pulsePhase : 0,
+        );
+      }
     }
   }
   for (const lp of scene.loops) {
@@ -122,6 +127,49 @@ export function paint(
   if (ui.linkPreview) {
     const box = scene.boxes.get(ui.linkPreview.from);
     if (box) drawLinkPreview(ctx, { x: box.cx, y: box.cy }, ui.linkPreview.to, theme);
+  }
+}
+
+function paintSfd(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  theme: Theme,
+  ui: PaintUi,
+): void {
+  const pipeByFlow = new Map(scene.pipes.map((p) => [p.flowId, p]));
+  for (const p of scene.pipes) drawSfdPipe(ctx, p, scene, theme);
+  for (const g of scene.edges) {
+    drawEdge(ctx, g, theme, g.id === ui.selectedEdgeId, null, ui.flowPhase);
+  }
+  for (const n of scene.nodes) {
+    if (n.type === "flow") continue;
+    const box = scene.boxes.get(n.id);
+    if (!box) continue;
+    drawNode(
+      ctx,
+      box,
+      n,
+      theme,
+      n.id === ui.selectedNodeId,
+      ui.liveNodeIds.has(n.id),
+      false,
+      n.id === ui.selectedNodeId ? ui.pulsePhase : 0,
+    );
+  }
+  for (const n of scene.nodes) {
+    if (n.type !== "flow") continue;
+    const box = scene.boxes.get(n.id);
+    if (!box) continue;
+    drawSfdValve(
+      ctx,
+      box,
+      n,
+      pipeByFlow.get(n.id),
+      theme,
+      n.id === ui.selectedNodeId,
+      ui.liveNodeIds.has(n.id),
+      n.id === ui.selectedNodeId ? ui.pulsePhase : 0,
+    );
   }
 }
 
@@ -339,6 +387,169 @@ function drawValve(
   ctx.lineTo(cx + 6, cy + 6);
   ctx.closePath();
   ctx.stroke();
+}
+
+function drawSfdPipe(
+  ctx: CanvasRenderingContext2D,
+  pipe: SfdPipeGeom,
+  scene: Scene,
+  theme: Theme,
+): void {
+  const flow = scene.nodes.find((n) => n.id === pipe.flowId);
+  drawDoubleLine(ctx, pipe.fromPoint, pipe.valvePoint, theme);
+  const axis = {
+    x: pipe.toPoint.x - pipe.valvePoint.x,
+    y: pipe.toPoint.y - pipe.valvePoint.y,
+  };
+  const len = Math.hypot(axis.x, axis.y) || 1;
+  const arrowLen = 12;
+  const toBase = {
+    x: pipe.toPoint.x - (axis.x / len) * arrowLen,
+    y: pipe.toPoint.y - (axis.y / len) * arrowLen,
+  };
+  drawDoubleLine(ctx, pipe.valvePoint, toBase, theme);
+  drawPipeArrow(ctx, pipe.valvePoint, pipe.toPoint, theme);
+
+  const sw = groupSwatch(flow?.group);
+  const tint = sw ? swatchFill(sw, theme.dark) : undefined;
+  if (pipe.fromCloud) drawCloud(ctx, pipe.fromCloud, theme, tint);
+  if (pipe.toCloud) drawCloud(ctx, pipe.toCloud, theme, tint);
+}
+
+function drawDoubleLine(
+  ctx: CanvasRenderingContext2D,
+  p0: Point,
+  p1: Point,
+  theme: Theme,
+): void {
+  const dx = p1.x - p0.x;
+  const dy = p1.y - p0.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const off = 3;
+  const nx = (-dy / len) * off;
+  const ny = (dx / len) * off;
+  ctx.strokeStyle = theme.graphite;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "round";
+  for (const sign of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(p0.x + nx * sign, p0.y + ny * sign);
+    ctx.lineTo(p1.x + nx * sign, p1.y + ny * sign);
+    ctx.stroke();
+  }
+}
+
+function drawPipeArrow(
+  ctx: CanvasRenderingContext2D,
+  from: Point,
+  tip: Point,
+  theme: Theme,
+): void {
+  const dx = tip.x - from.x;
+  const dy = tip.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const base = { x: tip.x - ux * 12, y: tip.y - uy * 12 };
+  ctx.beginPath();
+  ctx.moveTo(tip.x, tip.y);
+  ctx.lineTo(base.x + px * 6, base.y + py * 6);
+  ctx.lineTo(base.x - px * 6, base.y - py * 6);
+  ctx.closePath();
+  ctx.fillStyle = theme.graphite;
+  ctx.fill();
+}
+
+function drawCloud(
+  ctx: CanvasRenderingContext2D,
+  c: Point,
+  theme: Theme,
+  tint?: string,
+): void {
+  const puffs: Array<[number, number, number]> = [
+    [-14, 2, 9],
+    [-5, -6, 11],
+    [7, -6, 10],
+    [15, 2, 9],
+    [0, 4, 11],
+  ];
+  ctx.fillStyle = tint ?? theme.line2;
+  for (const [dx, dy, r] of puffs) {
+    circle(ctx, { x: c.x + dx, y: c.y + dy }, r);
+    ctx.fill();
+  }
+  ctx.strokeStyle = theme.line2;
+  ctx.lineWidth = 1.45;
+  for (const [dx, dy, r] of puffs) {
+    circle(ctx, { x: c.x + dx, y: c.y + dy }, r);
+    ctx.stroke();
+  }
+}
+
+function drawSfdValve(
+  ctx: CanvasRenderingContext2D,
+  box: NodeBox,
+  node: VariableFile,
+  pipe: SfdPipeGeom | undefined,
+  theme: Theme,
+  selected: boolean,
+  live: boolean,
+  pulse: number,
+): void {
+  const c = { x: box.cx, y: box.cy };
+  if (selected) {
+    const grow = 10 + 20 * pulse;
+    circle(ctx, c, grow);
+    ctx.fillStyle = withAlpha(theme.teal, 0.18 * (1 - pulse));
+    ctx.fill();
+    circle(ctx, c, 25);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = withAlpha(theme.teal, 0.55);
+    ctx.stroke();
+  }
+  if (live) {
+    circle(ctx, c, 27);
+    ctx.fillStyle = withAlpha(theme.live, 0.12);
+    ctx.fill();
+    circle(ctx, c, 22);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = theme.live;
+    ctx.stroke();
+  }
+
+  const angle = pipe?.axisAngle ?? 0;
+  const ux = Math.cos(angle);
+  const uy = Math.sin(angle);
+  const px = -uy;
+  const py = ux;
+  const size = 9;
+  const drawWing = (sign: number): void => {
+    const bx = c.x + px * size * sign;
+    const by = c.y + py * size * sign;
+    ctx.moveTo(bx + ux * size, by + uy * size);
+    ctx.lineTo(c.x, c.y);
+    ctx.lineTo(bx - ux * size, by - uy * size);
+    ctx.closePath();
+  };
+  ctx.beginPath();
+  drawWing(-1);
+  drawWing(1);
+  ctx.fillStyle = theme.surface;
+  ctx.fill();
+  const sw = groupSwatch(node.group);
+  ctx.strokeStyle = sw ? swatchBorder(sw, theme.dark) : theme.ink;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+
+  ctx.fillStyle = theme.ink;
+  ctx.font = "500 12px " + LABEL_FONT;
+  setLetterSpacing(ctx, LABEL_TRACKING);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(fitText(ctx, node.label, Math.max(72, box.w)), c.x, c.y + 16);
 }
 
 function drawEdge(

@@ -88,6 +88,31 @@ describe("noteCodec round-trip", () => {
     expect((round.extra["quant"] as Record<string, unknown>)["units"]).toBe("people");
   });
 
+  it("round-trips app-compatible flow and sfd blocks under extra", () => {
+    const src = `---
+id: flow_1
+type: flow
+label: Births
+x: 10.0
+y: 20.0
+flow:
+  from: ~source
+  to: pop
+sfd:
+  x: -80.0
+  y: 0.0
+quant:
+  equation: births
+---
+
+Birth flow.
+`;
+    const v = parseNote(src, yaml);
+    expect(v.extra.flow).toEqual({ from: "~source", to: "pop" });
+    expect(v.extra.sfd).toEqual({ x: -80, y: 0 });
+    expect(serializeNote(v)).toBe(src);
+  });
+
   it("quotes polarity and keeps booleans unquoted", () => {
     const v = emptyVariable("v1", "A");
     v.links = [{ to: "v2", polarity: "-", delay: true, indirect: false, nonlinear: false }];

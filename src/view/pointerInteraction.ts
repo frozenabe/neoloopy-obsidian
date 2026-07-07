@@ -46,8 +46,10 @@ export interface PointerHost {
   cancelArmedLink(): void;
   startRename(id: string): void;
 
+  previewNodePosition(id: string, x: number, y: number): void;
+  renderPosition(id: string): Point | null;
   persistNodePosition(id: string, x: number, y: number): Promise<void>;
-  createLink(from: string, to: string): Promise<void>;
+  createConnection(from: string, to: string | null, at: Point): Promise<string | null>;
   commitBow(source: string, target: string, curvature: number | undefined): Promise<void>;
   createNodeAt(world: Point): Promise<void>;
 }
@@ -199,8 +201,11 @@ export class PointerInteraction {
       const world = camera.toWorld(p.x, p.y);
       const node = graph.nodes.find((n) => n.id === this.dragNodeId);
       if (node) {
-        node.x = this.dragNodeStart.x + (world.x - this.dragWorldStart.x);
-        node.y = this.dragNodeStart.y + (world.y - this.dragWorldStart.y);
+        this.host.previewNodePosition(
+          node.id,
+          this.dragNodeStart.x + (world.x - this.dragWorldStart.x),
+          this.dragNodeStart.y + (world.y - this.dragWorldStart.y),
+        );
         this.host.rebuildScene();
       }
     } else if (this.mode === "moveBadge" && this.moved && this.dragLoopKey) {
@@ -246,15 +251,19 @@ export class PointerInteraction {
 
     const graph = this.host.graph();
     if (mode === "moveNode" && this.moved && this.dragNodeId && this.host.hasFolder() && graph) {
-      const node = graph.nodes.find((n) => n.id === this.dragNodeId);
-      if (node) await this.host.persistNodePosition(node.id, node.x, node.y);
+      const p = this.host.renderPosition(this.dragNodeId);
+      if (p) await this.host.persistNodePosition(this.dragNodeId, p.x, p.y);
     } else if (mode === "drawLink" && this.host.hasFolder()) {
       const scene = this.host.scene();
       const world = this.host.camera.toWorld(this.canvasPoint(e).x, this.canvasPoint(e).y);
       const target = scene ? hitNode(scene.boxes, world) : null;
-      if (this.linkFrom && target && target !== this.linkFrom) {
-        await this.host.createLink(this.linkFrom, target);
-        this.host.select(target, null, null); // chain: A→B→C
+      if (this.linkFrom) {
+        const next = await this.host.createConnection(
+          this.linkFrom,
+          target && target !== this.linkFrom ? target : null,
+          world,
+        );
+        if (next) this.host.select(next, null, null); // chain: A→B→C, or select the new flow valve
       }
     } else if (mode === "bowEdge" && this.moved && this.bowLink && this.host.hasFolder() && this.bowSource && this.bowTarget) {
       await this.host.commitBow(this.bowSource, this.bowTarget, this.bowLink.curvature);

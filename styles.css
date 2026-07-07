@@ -28,6 +28,31 @@
   flex: 1;
 }
 
+.neoloopy-toolbar-view-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--background-modifier-border);
+}
+
+.neoloopy-toolbar-view-btn {
+  min-width: 38px;
+  height: 24px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.neoloopy-toolbar-view-btn.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent, #fff);
+}
+
 /* `+ New model` matches the app's model-list FAB: a solid black button with a
    white glyph (t.ink #1F2329 surface, white +), floated with a soft shadow.
    Hardcoded so it reads as that same control in every theme. */
@@ -205,6 +230,38 @@
   flex-direction: row;
   align-items: center;
   gap: 8px;
+}
+
+.neoloopy-flow-endpoints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: var(--nl-surface);
+  box-shadow: 0 3px 12px var(--nl-shadow);
+}
+
+.neoloopy-flow-endpoints.is-hidden {
+  display: none;
+}
+
+.neoloopy-flow-endpoint-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.neoloopy-flow-endpoint-label {
+  color: var(--nl-ink3);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.neoloopy-flow-endpoint-select {
+  max-width: 128px;
+  min-height: 26px;
+  font-size: 12px;
 }
 
 .neoloopy-edge-menu {
@@ -776,6 +833,74 @@
 }
 .neoloopy-ip-empty { color: var(--text-faint); padding: 12px 0; }
 
+.neoloopy-ip-view-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--background-modifier-border);
+}
+
+.neoloopy-ip-view-btn {
+  min-width: 34px;
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.neoloopy-ip-view-btn.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent, #fff);
+}
+
+.neoloopy-ip-shell {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+.neoloopy-ip-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.neoloopy-ip-rail-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.neoloopy-ip-rail-btn.is-active {
+  background: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+}
+
+.neoloopy-ip-rail-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.neoloopy-ip-body {
+  min-width: 0;
+}
+
 .neoloopy-ip-section { margin-bottom: 16px; }
 .neoloopy-ip-label {
   text-transform: uppercase; letter-spacing: 1px; font-size: 10px;
@@ -856,4 +981,57 @@
 .neoloopy-ip-parent-via {
   font-size: 11.5px;
   color: var(--text-muted);
+}
+
+.neoloopy-ip-health {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.neoloopy-ip-health-actions {
+  margin-bottom: 8px;
+}
+
+.neoloopy-ip-health-run {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.neoloopy-ip-health-stamp {
+  margin: 2px 0 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.neoloopy-ip-health-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+.neoloopy-ip-health-detail {
+  margin-top: 2px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.neoloopy-ip-health.is-warn .neoloopy-ip-health-label {
+  color: var(--text-error);
+}
+
+@media (max-width: 600px) {
+  .neoloopy-ip-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .neoloopy-ip-rail {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
 }

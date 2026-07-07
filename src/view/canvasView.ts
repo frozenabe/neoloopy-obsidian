@@ -26,6 +26,7 @@ import {
 import type NeoloopyPlugin from "../main";
 import {
   Camera,
+  DiagramViewMode,
   EdgeGeom,
   GraphView,
   LoopHighlight,
@@ -35,7 +36,9 @@ import {
   QuantPatch,
   Scene,
   SceneCache,
+  SINK_CLOUD,
   Theme,
+  extraWithSfdPosition,
   linkPointsToModel,
   loopEdgeIds,
   paint,
@@ -75,6 +78,7 @@ export class CanvasView extends ItemView {
   private readonly sceneCache = new SceneCache();
   private readonly camera = new Camera();
   private fittedOnce = false;
+  private diagramMode: DiagramViewMode = "cld";
 
   private selNode: string | null = null;
   private selEdge: string | null = null;
@@ -169,6 +173,8 @@ export class CanvasView extends ItemView {
       openModel: (folder) => void this.openModel(folder),
       newModel: () => void this.newModel(),
       renameModel: () => void this.renameModel(),
+      diagramMode: () => this.diagramMode,
+      setDiagramMode: (mode) => this.setDiagramMode(mode),
       tidy: () => void this.tidy(),
       openExportMenu: (evt) => this.openExportMenu(evt),
       toggleInsightPanel: () => this.toggleInsightPanel(),
@@ -183,6 +189,8 @@ export class CanvasView extends ItemView {
     this.insightPanelView = new InsightPanel(this.insightPanel, {
       isOpen: () => this.plugin.settings.insightPanelOpen,
       graph: () => this.graph,
+      diagramMode: () => this.diagramMode,
+      setDiagramMode: (mode) => this.setDiagramMode(mode),
       selectedLoop: () => this.selLoop,
       selectLoop: (key) => {
         this.select(null, null, key);
@@ -208,12 +216,14 @@ export class CanvasView extends ItemView {
       camera: this.camera,
       scene: () => this.scene,
       graph: () => this.graph,
+      diagramMode: () => this.diagramMode,
       selection: () => ({ node: this.selNode, edge: this.selEdge, loop: this.selLoop }),
       isIdle: () => this.pointer.isIdle(),
       selectedEdgeGeom: () => this.selectedEdgeGeom(),
       loopHasNote: (lp) => (this.loopNotesCache[this.dartLoopKey(lp)] ?? "").trim().length > 0,
       listen: (el, type, cb) => this.registerDomEvent(el, type as keyof HTMLElementEventMap, cb),
       setNodeType: (id, t) => void this.setNodeType(id, t),
+      setFlowEndpoints: (id, from, to) => void this.setFlowEndpoints(id, from, to),
       setNodeGroup: (id, grp) => void this.setNodeGroup(id, grp),
       openSubsystemMenu: (ev) => void this.openSubsystemMenu(ev),
       openEquationModal: () => void this.openEquationModal(),
@@ -242,7 +252,8 @@ export class CanvasView extends ItemView {
       tidy: () => this.tidy(),
       fitToContent: () => this.fitToContent(),
       createNodeAt: (world) => this.createNodeAt(world),
-      createLink: (from, to) => this.createLink(from, to),
+      createConnection: (from, to, at) => this.createConnection(from, to, at),
+      previewNodePosition: (id, x, y) => this.previewNodePosition(id, x, y),
       persistNodePosition: (id, x, y) => this.persistNodePosition(id, x, y),
       deleteSelection: () => this.deleteSelection(),
     });
@@ -263,8 +274,10 @@ export class CanvasView extends ItemView {
       commitRename: () => this.commitRename(),
       cancelArmedLink: () => this.keyboard.clearLink(),
       startRename: (id) => this.startRename(id),
+      previewNodePosition: (id, x, y) => this.previewNodePosition(id, x, y),
+      renderPosition: (id) => this.renderPosition(id),
       persistNodePosition: (id, x, y) => this.persistNodePosition(id, x, y),
-      createLink: (from, to) => this.createLink(from, to),
+      createConnection: (from, to, at) => this.createConnection(from, to, at),
       commitBow: (s, t, c) => this.commitBow(s, t, c),
       createNodeAt: (world) => this.createNodeAt(world),
     });
@@ -470,7 +483,7 @@ export class CanvasView extends ItemView {
   /** Rebuild the renderable scene through the cache (label-width memo +
    *  dirty-tracking); the cache returns the same scene when nothing moved. */
   private rebuildScene(): void {
-    this.scene = this.sceneCache.build(this.graph, this.bowSigns, this.loopBadgeOverrides);
+    this.scene = this.sceneCache.build(this.graph, this.bowSigns, this.loopBadgeOverrides, this.diagramMode);
   }
 
   private async newModel(): Promise<void> {
@@ -555,7 +568,12 @@ export class CanvasView extends ItemView {
       return;
     }
     const c = this.camera.toWorld(this.canvas.clientWidth / 2, this.canvas.clientHeight / 2);
-    const v = await this.model.addVariable(this.folder, { label: "", x: c.x, y: c.y });
+    const v = await this.model.addVariable(this.folder, {
+      label: "",
+      type: this.diagramMode === "sfd" ? "stock" : "auxiliary",
+      x: c.x,
+      y: c.y,
+    });
     await this.reloadGraph();
     this.selNode = v.id;
     this.selEdge = this.selLoop = null;
@@ -644,9 +662,11 @@ export class CanvasView extends ItemView {
     const dpr = window.devicePixelRatio || 1;
     const theme = (this.themeCache ??= resolveTheme());
     const scene: Scene = this.scene ?? {
+      mode: this.diagramMode,
       nodes: [],
       boxes: new Map(),
       edges: [],
+      pipes: [],
       loops: [],
       labels: new Map(),
       badges: new Map(),
@@ -679,6 +699,17 @@ export class CanvasView extends ItemView {
     this.insightPanel.toggleClass("is-open", open);
     this.resize();
     this.insightPanelView.render();
+  }
+
+  private setDiagramMode(mode: DiagramViewMode): void {
+    if (this.diagramMode === mode) return;
+    this.diagramMode = mode;
+    this.select(null, null, null);
+    this.bowSigns.clear();
+    this.rebuildScene();
+    this.insightPanelView.render();
+    this.toolbar.setDiagramMode(mode);
+    this.render();
   }
 
   // ---- events --------------------------------------------------------------
@@ -851,7 +882,12 @@ export class CanvasView extends ItemView {
     // recenterForKeyboard, the WebKit port of the Dart app's behaviour.
     const input = this.openRenameInput("", this.camera.toScreen(world.x, world.y));
     const v = await this.model
-      .addVariable(this.folder, { label: "", x: world.x, y: world.y })
+      .addVariable(this.folder, {
+        label: "",
+        type: this.diagramMode === "sfd" ? "stock" : "auxiliary",
+        x: world.x,
+        y: world.y,
+      })
       .catch((e) => {
         // Persist failed — don't strand the pre-opened input.
         if (this.renameInput === input) this.renameInput = null;
@@ -870,6 +906,17 @@ export class CanvasView extends ItemView {
     await this.model.updateVariable(this.folder, id, { type });
     await this.reloadGraph();
     this.render();
+  }
+
+  private async setFlowEndpoints(id: string, from: string, to: string): Promise<void> {
+    if (!this.folder) return;
+    try {
+      await this.model.setFlowEndpoints(this.folder, id, from, to);
+      await this.reloadGraph();
+      this.render();
+    } catch (e) {
+      new Notice(`Couldn't set flow endpoints: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   /** Assign (or clear, with null) a node's curated group color. */
@@ -980,14 +1027,72 @@ export class CanvasView extends ItemView {
    *  move is already applied to the in-memory graph + scene). */
   private async persistNodePosition(id: string, x: number, y: number): Promise<void> {
     if (!this.folder) return;
-    await this.model.moveVariable(this.folder, id, x, y);
+    if (this.diagramMode === "sfd") {
+      await this.model.moveVariableSfd(this.folder, id, x, y);
+    } else {
+      await this.model.moveVariable(this.folder, id, x, y);
+    }
   }
 
-  /** Create a positive link A→B and reload; the caller selects the target. */
-  private async createLink(from: string, to: string): Promise<void> {
-    if (!this.folder) return;
-    await this.model.addLink(this.folder, from, to, { polarity: "+" });
+  private previewNodePosition(id: string, x: number, y: number): void {
+    const node = this.graph?.nodes.find((n) => n.id === id);
+    if (!node) return;
+    if (this.diagramMode === "sfd") {
+      node.extra = extraWithSfdPosition(node.extra, x, y);
+    } else {
+      node.x = x;
+      node.y = y;
+    }
+  }
+
+  private renderPosition(id: string): Point | null {
+    const b = this.scene?.boxes.get(id);
+    return b ? { x: b.cx, y: b.cy } : null;
+  }
+
+  /**
+   * Complete a connect-ring gesture. CLD always creates an information link.
+   * SFD creates a material flow only from a stock to another stock or to empty
+   * canvas; all other node drops remain information connectors.
+   */
+  private async createConnection(from: string, to: string | null, at: Point): Promise<string | null> {
+    if (!this.folder || !this.graph) return null;
+    const src = this.graph.nodes.find((n) => n.id === from);
+    const tgt = to ? this.graph.nodes.find((n) => n.id === to) : null;
+    if (!src) return null;
+
+    if (this.diagramMode === "sfd" && src.type === "stock") {
+      if (tgt?.type === "stock") {
+        const a = this.renderPosition(src.id) ?? { x: src.x, y: src.y };
+        const b = this.renderPosition(tgt.id) ?? { x: tgt.x, y: tgt.y };
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const flow = await this.model.addVariable(this.folder, {
+          label: "flow",
+          type: "flow",
+          x: mid.x,
+          y: mid.y,
+        });
+        await this.model.setFlowEndpoints(this.folder, flow.id, src.id, tgt.id);
+        await this.reloadGraph();
+        return flow.id;
+      }
+      if (!tgt) {
+        const flow = await this.model.addVariable(this.folder, {
+          label: "flow",
+          type: "flow",
+          x: at.x,
+          y: at.y,
+        });
+        await this.model.setFlowEndpoints(this.folder, flow.id, src.id, SINK_CLOUD);
+        await this.reloadGraph();
+        return flow.id;
+      }
+    }
+
+    if (!tgt || tgt.id === from) return null;
+    await this.model.addLink(this.folder, from, tgt.id, { polarity: "+" });
     await this.reloadGraph();
+    return tgt.id;
   }
 
   /** Persist an edge's dragged curvature (already applied to the in-memory link). */

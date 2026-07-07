@@ -16,11 +16,14 @@
 
 import { Camera, Point } from "./camera";
 import {
+  DiagramViewMode,
   buildEdgeGeoms,
   buildNodeBoxes,
-  collectEdges,
+  buildSfdPipeGeoms,
+  collectInfoEdges,
   computeBadges,
-  nodeBounds,
+  sceneBounds,
+  sfdRenderPositions,
 } from "./geometry";
 import { GraphView } from "../engine/engine";
 import { Scene, LABEL_FONT, LABEL_TRACKING } from "./painter";
@@ -89,6 +92,7 @@ export class SceneCache {
     graph: GraphView | null,
     bowSigns: Map<string, number>,
     badgeOverrides: Map<string, Point>,
+    mode: DiagramViewMode = "cld",
   ): Scene | null {
     if (!graph) {
       this.scene = null;
@@ -96,17 +100,25 @@ export class SceneCache {
       this.lastSig = null;
       return null;
     }
-    const sig = this.signature(graph, bowSigns, badgeOverrides);
+    const sig = this.signature(graph, bowSigns, badgeOverrides, mode);
     if (this.scene && graph === this.lastGraph && sig === this.lastSig) return this.scene;
 
-    const boxes = buildNodeBoxes(graph.nodes, (s) => this.measure(s));
-    const edges = buildEdgeGeoms(collectEdges(graph.nodes), boxes, bowSigns);
-    const badges = computeBadges(graph.loops, boxes, badgeOverrides);
+    const boxes = buildNodeBoxes(
+      graph.nodes,
+      (s) => this.measure(s),
+      mode === "sfd" ? sfdRenderPositions(graph.nodes) : undefined,
+    );
+    const edges = buildEdgeGeoms(collectInfoEdges(graph.nodes, mode), boxes, bowSigns);
+    const pipes = mode === "sfd" ? buildSfdPipeGeoms(graph.nodes, boxes) : [];
+    const loops = mode === "sfd" ? [] : graph.loops;
+    const badges = computeBadges(loops, boxes, badgeOverrides);
     this.scene = {
+      mode,
       nodes: graph.nodes,
       boxes,
       edges,
-      loops: graph.loops,
+      pipes,
+      loops,
       labels: graph.labels,
       badges,
     };
@@ -115,7 +127,7 @@ export class SceneCache {
     // `bowSigns`, which feeds the signature — so the pre-build `sig` is already
     // stale. Record the post-build signature instead, or the next unchanged call
     // would needlessly rebuild once before the cache settles.
-    this.lastSig = this.signature(graph, bowSigns, badgeOverrides);
+    this.lastSig = this.signature(graph, bowSigns, badgeOverrides, mode);
     return this.scene;
   }
 
@@ -127,7 +139,7 @@ export class SceneCache {
   fit(camera: Camera, width: number, height: number): boolean {
     if (!this.scene || this.scene.boxes.size === 0) return false;
     if (width === 0 || height === 0) return false;
-    camera.fit(nodeBounds(this.scene.boxes), width, height);
+    camera.fit(sceneBounds(this.scene.boxes, this.scene.pipes), width, height);
     return true;
   }
 
@@ -142,10 +154,21 @@ export class SceneCache {
     graph: GraphView,
     bowSigns: Map<string, number>,
     badgeOverrides: Map<string, Point>,
+    mode: DiagramViewMode,
   ): string {
-    const parts: string[] = [];
+    const parts: string[] = [mode];
     for (const n of graph.nodes) {
-      parts.push(`${n.id}:${n.x}:${n.y}:${n.type}:${n.label}`);
+      const sfd = n.extra["sfd"];
+      const sfdSig =
+        sfd && typeof sfd === "object" && !Array.isArray(sfd)
+          ? `${String((sfd as Record<string, unknown>)["x"] ?? "")},${String((sfd as Record<string, unknown>)["y"] ?? "")}`
+          : "";
+      const flow = n.extra["flow"];
+      const flowSig =
+        flow && typeof flow === "object" && !Array.isArray(flow)
+          ? `${String((flow as Record<string, unknown>)["from"] ?? "")}->${String((flow as Record<string, unknown>)["to"] ?? "")}`
+          : "";
+      parts.push(`${n.id}:${n.x}:${n.y}:${sfdSig}:${n.type}:${n.label}:${flowSig}`);
       for (const l of n.links) parts.push(`>${l.to}:${l.curvature ?? ""}`);
     }
     parts.push("|");

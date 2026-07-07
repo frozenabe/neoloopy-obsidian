@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, extname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { networkInterfaces } from "node:os";
+import { builtinModules as builtins } from "node:module";
 import esbuild from "esbuild";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,9 @@ const KEEP_OPEN = process.argv.includes("--keep-open");
 // can open it in the iOS Simulator's Safari (localhost) or a real device on the
 // same Wi-Fi (LAN IP) — real iOS WebKit, the closest thing to the Obsidian app.
 const SERVE = process.argv.includes("--serve");
+const DEBUG_BUILD = process.argv.includes("--debug-build");
+const PORT_ARG = process.argv.find((arg) => arg.startsWith("--port="));
+const FIXED_PORT = PORT_ARG ? Number(PORT_ARG.slice("--port=".length)) : 0;
 
 const log = (...a) => console.log(...a);
 const results = [];
@@ -38,9 +42,39 @@ const record = (name, pass, detail) => {
 };
 
 // ---- 1. build the plugin bundle + the shim ---------------------------------
-log("→ building main.js from current source…");
-const build = spawnSync("node", ["esbuild.config.mjs", "production"], { cwd: root, encoding: "utf8" });
-if (build.status !== 0) { log(build.stdout, build.stderr); throw new Error("plugin build failed"); }
+log(`→ building main.js from current source${DEBUG_BUILD ? " (debug, readable)" : ""}…`);
+if (DEBUG_BUILD) {
+  await esbuild.build({
+    entryPoints: [join(root, "src/main.ts")],
+    bundle: true,
+    external: [
+      "obsidian",
+      "electron",
+      "@codemirror/autocomplete",
+      "@codemirror/collab",
+      "@codemirror/commands",
+      "@codemirror/language",
+      "@codemirror/lint",
+      "@codemirror/search",
+      "@codemirror/state",
+      "@codemirror/view",
+      "@lezer/common",
+      "@lezer/highlight",
+      "@lezer/lr",
+      ...builtins,
+    ],
+    format: "cjs",
+    platform: "browser",
+    target: "es2020",
+    sourcemap: "inline",
+    minify: false,
+    outfile: join(root, "main.js"),
+    logLevel: "info",
+  });
+} else {
+  const build = spawnSync("node", ["esbuild.config.mjs", "production"], { cwd: root, encoding: "utf8" });
+  if (build.status !== 0) { log(build.stdout, build.stderr); throw new Error("plugin build failed"); }
+}
 
 log("→ bundling browser obsidian shim…");
 await esbuild.build({
@@ -54,6 +88,14 @@ const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/ja
 const server = createServer(async (req, res) => {
   try {
     const url = decodeURIComponent((req.url || "/").split("?")[0]);
+    if (url === "/__nl-log" && req.method === "POST") {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      const from = req.socket.remoteAddress || "unknown";
+      log(`[phone ${from}] ${body}`);
+      res.writeHead(204).end();
+      return;
+    }
     const file = join(root, url === "/" ? "/test/webkit/harness.html" : url);
     if (!file.startsWith(root)) { res.writeHead(403).end(); return; }
     const body = await readFile(file);
@@ -63,7 +105,7 @@ const server = createServer(async (req, res) => {
   }
 });
 const bindHost = SERVE ? "0.0.0.0" : "127.0.0.1";
-await new Promise((r) => server.listen(0, bindHost, r));
+await new Promise((r) => server.listen(FIXED_PORT, bindHost, r));
 const port = server.address().port;
 const pagePath = "/test/webkit/harness.html";
 const url = `http://127.0.0.1:${port}${pagePath}`;

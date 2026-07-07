@@ -70,8 +70,20 @@ export class ModelController {
     return this.guarded(() => this.engine.moveVariable(folder, id, x, y));
   }
 
+  moveVariableSfd(folder: string, id: string, x: number, y: number): Promise<void> {
+    return this.guarded(() => this.engine.moveVariableSfd(folder, id, x, y));
+  }
+
+  pinSfdLayout(folder: string): Promise<void> {
+    return this.guarded(() => this.engine.pinSfdLayout(folder));
+  }
+
   removeVariable(folder: string, id: string): Promise<void> {
     return this.guarded(() => this.engine.removeVariable(folder, id));
+  }
+
+  setFlowEndpoints(folder: string, flowId: string, from: string, to: string): Promise<void> {
+    return this.guarded(() => this.engine.setFlowEndpoints(folder, flowId, from, to));
   }
 
   setSubsystem(

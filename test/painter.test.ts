@@ -45,9 +45,11 @@ const strokeCount = (calls: string[]): number => calls.filter((c) => c === "stro
 function sceneWith(node: VariableFile, w = 160): Scene {
   const box: NodeBox = { id: node.id, cx: 100, cy: 100, w, h: 40, type: node.type };
   return {
+    mode: "cld",
     nodes: [node],
     boxes: new Map([[node.id, box]]),
     edges: [],
+    pipes: [],
     loops: [],
     labels: new Map(),
     badges: new Map(),

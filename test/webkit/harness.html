@@ -12,16 +12,67 @@
   .neoloopy-canvas-root { display: flex; flex-direction: column; height: 100%; }
   .neoloopy-canvas-split { display: flex; flex: 1; min-height: 0; }
   .view-header { display: none; }
+  #nl-boot {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+    margin: 0;
+    padding: 12px;
+    overflow: auto;
+    box-sizing: border-box;
+    color: #79ff90;
+    background: #050505;
+    font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+  }
+  #nl-boot.is-ready {
+    inset: auto 0 0 0;
+    max-height: 40vh;
+    background: rgba(0, 0, 0, .85);
+  }
 </style>
 </head>
 <body>
 <div id="mount"></div>
+<pre id="nl-boot">neoloopy iOS harness: page loaded
+</pre>
+
+<script>
+  (function installBootLog() {
+    var bootEl = document.getElementById("nl-boot");
+    var t0 = Date.now();
+    function line(message) {
+      if (!bootEl) return;
+      bootEl.textContent =
+        "+" + String(Date.now() - t0).padStart(5, " ") + "ms " + message + "\n" +
+        bootEl.textContent;
+      try {
+        fetch("/__nl-log", {
+          method: "POST",
+          headers: { "content-type": "text/plain" },
+          body: message,
+        }).catch(function () {});
+      } catch (_) {}
+    }
+    window.__nlBootLog = line;
+    window.addEventListener("error", function (event) {
+      line("ERROR " + (event && event.message ? event.message : "unknown"));
+      if (event && event.filename) line("at " + event.filename + ":" + event.lineno + ":" + event.colno);
+    });
+    window.addEventListener("unhandledrejection", function (event) {
+      var reason = event && event.reason;
+      line("UNHANDLED " + ((reason && (reason.stack || reason.message)) || String(reason)));
+    });
+    line("boot logger installed");
+  })();
+</script>
 
 <!-- 1. Obsidian shim + DOM helpers + in-memory vault (sets window.__OBSIDIAN__, __makeApp) -->
 <script src="/test/webkit/.shim.bundle.js"></script>
 
 <!-- 2. CommonJS glue so the CJS main.js bundle resolves require/module/exports -->
 <script>
+  window.__nlBootLog && window.__nlBootLog("installing CommonJS glue");
   window.module = { exports: {} };
   window.exports = window.module.exports;
   window.require = function (m) { return m === "obsidian" ? window.__OBSIDIAN__ : {}; };
@@ -35,18 +86,26 @@
 <!-- 4. Boot: seed a model, mount the real CanvasView, expose a drive API -->
 <script>
 (async function boot() {
+  const bootLog = window.__nlBootLog || function () {};
   const status = { ready: false, error: null };
   window.__nl = { status };
   try {
+    bootLog("boot script entered");
     const obsidian = window.__OBSIDIAN__;
+    if (!obsidian) throw new Error("Obsidian shim did not load");
     const app = window.__makeApp();
     const PluginClass = window.module.exports.default || window.module.exports;
+    if (typeof PluginClass !== "function") throw new Error("Plugin bundle did not export a constructor");
 
+    bootLog("constructing plugin");
     const plugin = new PluginClass(app, { id: "neoloopy", version: "0.0.0-harness" });
+    bootLog("plugin onload");
     await plugin.onload();
 
     // Seed the same demo model the smoke tests use (R1 reinforcing + B1 balancing).
+    bootLog("creating demo model");
     const ref = await plugin.engine.createModel("iOS Harness");
+    bootLog("building demo model");
     await plugin.engine.buildModel(ref.folder, {
       variables: [
         { label: "Coffee intake", type: "stock" },
@@ -64,11 +123,14 @@
     });
 
     const factory = plugin._views["neoloopy-canvas"];
+    if (typeof factory !== "function") throw new Error("Canvas view factory was not registered");
+    bootLog("opening canvas view");
     const leaf = new obsidian.WorkspaceLeaf(app);
     const view = factory(leaf);
     leaf.view = view;
     app.workspace.__setActive(view);
     await view.onOpen();
+    bootLog("opening seeded model");
     if (!view.currentFolder()) await view.openModel(ref.folder);
 
     const canvas = () => view.contentEl.querySelector("canvas.neoloopy-canvas");
@@ -143,12 +205,10 @@
     });
 
     // ---- on-screen event log (real-device diagnosis; no devtools needed) ----
-    const logEl = document.createElement("pre");
-    logEl.style.cssText =
-      "position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;margin:0;" +
-      "padding:6px;font:11px/1.3 monospace;color:#5f5;background:rgba(0,0,0,.85);" +
-      "z-index:99999;white-space:pre-wrap";
-    document.body.appendChild(logEl);
+    const logEl = document.getElementById("nl-boot") || document.createElement("pre");
+    logEl.id = "nl-boot";
+    logEl.classList.add("is-ready");
+    if (!logEl.parentElement) document.body.appendChild(logEl);
     const t0 = Date.now();
     const cnt = () => (view.graph ? view.graph.nodes.length : 0);
     const nllog = (m) => {
@@ -185,7 +245,13 @@
 
     status.ready = true;
   } catch (e) {
-    status.error = (e && e.stack) || String(e);
+    const message = [
+      e && e.name ? `name=${e.name}` : "",
+      e && e.message ? `message=${e.message}` : "",
+      e && e.stack ? `stack=${e.stack}` : "",
+    ].filter(Boolean).join("\n") || String(e);
+    status.error = message;
+    bootLog("BOOT FAILED " + status.error);
     /* eslint-disable-next-line no-console */
     console.error("[harness boot error]", status.error);
   }

@@ -346,17 +346,26 @@ async function main() {
   const panel = findByClass(view.contentEl, "neoloopy-insight-panel")[0];
   check("insight panel exists", !!panel);
   check("insight panel open by default", !!panel && panel.classList.contains("is-open"));
+  view.insightPanelView.active = "loops";
+  view.insightPanelView.render();
   check(
     "panel lists the detected loops",
     findByClass(panel, "neoloopy-ip-loop").length === view.graph.loops.length,
     String(findByClass(panel, "neoloopy-ip-loop").length),
   );
+  view.insightPanelView.active = "structure";
+  view.insightPanelView.render();
   check("panel shows the structure section", findByClass(panel, "neoloopy-ip-label").some((e) => e._text === "Structure"));
   // What-if simulation is intentionally NOT in the plugin — quant is preview-only
   // in Obsidian (definitions yes, the simulator no). Guard against it returning.
   check("panel has no what-if section (simulator stays out of Obsidian)", findByClass(panel, "neoloopy-ip-whatif-controls").length === 0);
+  view.insightPanelView.active = "health";
+  view.insightPanelView.render();
+  check("Health section has a Run checks button", findByClass(panel, "neoloopy-ip-health-run").length === 1);
 
   // System card: always present when a model is open; the icon opens System.md.
+  view.insightPanelView.active = "docs";
+  view.insightPanelView.render();
   check("panel shows the System card", findByClass(panel, "neoloopy-ip-system").length === 1);
   check("System card has an open button", findByClass(panel, "neoloopy-ip-system-open").length === 1);
 
@@ -367,6 +376,8 @@ async function main() {
   const pv = await plugin.engine.addVariable(parentRef.folder, { label: "Coffee sector" });
   await plugin.engine.setSubsystem(parentRef.folder, pv.id, { folder: ref.folder, name: ref.name });
   await view.openModel(ref.folder);
+  view.insightPanelView.active = "docs";
+  view.insightPanelView.render();
   const parentRows = findByClass(panel, "neoloopy-ip-parent");
   check("panel shows one parent row", parentRows.length === 1, String(parentRows.length));
   check(

@@ -214,6 +214,42 @@ export function emitExtra(lines: string[], key: string, value: unknown, indent: 
   }
 }
 
+function emitFlowExtra(lines: string[], value: unknown): void {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    emitExtra(lines, "flow", value, 0);
+    return;
+  }
+  const m = value as Record<string, unknown>;
+  lines.push("flow:");
+  if (m["from"] !== undefined) lines.push(`  from: ${scalar(m["from"])}`);
+  if (m["to"] !== undefined) lines.push(`  to: ${scalar(m["to"])}`);
+  for (const [k, v] of Object.entries(m)) {
+    if (k === "from" || k === "to") continue;
+    emitExtra(lines, k, v, 1);
+  }
+}
+
+function emitSfdExtra(lines: string[], value: unknown): void {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    emitExtra(lines, "sfd", value, 0);
+    return;
+  }
+  const m = value as Record<string, unknown>;
+  lines.push("sfd:");
+  if (m["x"] !== undefined) {
+    const x = m["x"];
+    lines.push(`  x: ${typeof x === "number" ? numToYaml(x) : scalar(x)}`);
+  }
+  if (m["y"] !== undefined) {
+    const y = m["y"];
+    lines.push(`  y: ${typeof y === "number" ? numToYaml(y) : scalar(y)}`);
+  }
+  for (const [k, v] of Object.entries(m)) {
+    if (k === "x" || k === "y") continue;
+    emitExtra(lines, k, v, 1);
+  }
+}
+
 export function serializeNote(v: VariableFile): string {
   const lines: string[] = [FENCE];
   lines.push(`id: ${scalar(v.id)}`);
@@ -247,7 +283,11 @@ export function serializeNote(v: VariableFile): string {
       }
     }
   }
-  for (const [k, val] of Object.entries(v.extra)) emitExtra(lines, k, val, 0);
+  for (const [k, val] of Object.entries(v.extra)) {
+    if (k === "flow") emitFlowExtra(lines, val);
+    else if (k === "sfd") emitSfdExtra(lines, val);
+    else emitExtra(lines, k, val, 0);
+  }
   lines.push(FENCE);
 
   let out = lines.join("\n") + "\n";

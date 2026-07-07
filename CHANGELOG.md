@@ -5,6 +5,24 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.15] - 2026-07-07
+
+### Added
+
+- **Stock-and-flow diagram view.** The canvas now has a CLD/SFD mode toggle, renders stock-flow pipes with valves and clouds, persists SFD-specific node positions, and can create stock-to-stock or stock-to-sink flows from the connect gesture.
+- **Insights destinations.** The Insights panel now uses Structure, Loops, Docs, and Health destinations, with a local health check for disconnected variables, duplicate labels, unwired flows, and invalid flow endpoints.
+- **Mobile WebKit diagnostics.** The iOS harness can expose boot progress and phone-side logs, bind to a fixed port, and run a readable debug build for real-device diagnosis.
+
+### Changed
+
+- Flow metadata is now serialized as explicit `flow.from` / `flow.to` frontmatter and SFD positions are serialized under `sfd.x` / `sfd.y`.
+- Stock governing-flow summaries and deletion cleanup now understand explicit SFD flow endpoints instead of relying only on legacy flow-to-stock links.
+
+### Fixed
+
+- The plugin release metadata now advertises `0.1.15` to Obsidian mobile through `versions.json`.
+- The local build/test scripts build the shared `@neoloopy/cld-canvas` workspace before plugin validation.
+
 ## [0.1.11] - 2026-06-26
 
 ### Fixed
@@ -171,6 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   annotate them, and export to JSON / Markdown / Mermaid — fully local and
   offline.
 
+[0.1.15]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.15
 [0.1.8]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.8
 [0.1.7]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.7
 [0.1.6]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.6

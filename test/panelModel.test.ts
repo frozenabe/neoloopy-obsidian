@@ -32,6 +32,13 @@ describe("stockGoverningFlow", () => {
     expect(stockGoverningFlow(s, [s])).toBeUndefined();
   });
 
+  it("derives a stock's net flow from explicit sfd flow endpoints", () => {
+    const s = stock("pop", "Population", { initial: 100 });
+    const births = { ...flow("b", "Births", "pop", "+"), links: [], extra: { flow: { from: "~source", to: "pop" } } };
+    const deaths = { ...flow("d", "Deaths", "pop", "-"), links: [], extra: { flow: { from: "pop", to: "~sink" } } };
+    expect(stockGoverningFlow(s, [s, births, deaths])).toBe("+ Births − Deaths");
+  });
+
   it("returns undefined for a non-stock", () => {
     const drain = flow("d", "Drain", "pop", "-");
     expect(stockGoverningFlow(drain, [drain])).toBeUndefined();
