@@ -5,6 +5,12 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.16] - 2026-07-09
+
+### Changed
+
+- Corrected the copyright holder in the plugin and `@neoloopy/cld-canvas` license files to `Abraham Kim`, the legal owner of neoloopy. No functional or behavioral changes.
+
 ## [0.1.15] - 2026-07-07
 
 ### Added
