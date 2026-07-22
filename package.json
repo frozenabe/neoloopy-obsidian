@@ -1,6 +1,6 @@
 {
   "name": "neoloopy-obsidian",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "neoloopy Obsidian plugin — local-first causal-loop diagrams",
   "main": "main.js",
   "type": "module",

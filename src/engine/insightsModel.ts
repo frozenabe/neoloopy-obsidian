@@ -1,7 +1,9 @@
 import {
+  DiagramViewMode,
   GraphView,
   VariableFile,
   flowOf,
+  loopsForMode,
   validateFlowEndpoints,
 } from "@neoloopy/cld-canvas";
 
@@ -19,6 +21,17 @@ export function loopAnalysisWarning(g: GraphView): string | null {
   return g.analysisError
     ? "Quantitative loop analysis is incomplete. No partial quantitative badges were added."
     : null;
+}
+
+/** Honest empty copy after the current canvas mode's loop-visibility filter. */
+export function loopEmptyStateMessage(
+  g: GraphView,
+  mode: DiagramViewMode,
+): string | null {
+  if (loopsForMode(g.loops, mode).length > 0) return null;
+  return mode === "sfd" && g.loops.length > 0
+    ? "No complete loop representation is available in SFD."
+    : "No feedback loops detected.";
 }
 
 /** Complete command-palette loop report, including any analysis qualifier. */

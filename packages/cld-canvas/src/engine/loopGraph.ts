@@ -124,7 +124,11 @@ export class LoopGraph {
     return adj;
   }
 
-  /** All simple directed cycles, R/B classified, deduped by the legacy node set. */
+  /**
+   * All simple directed cycles, R/B classified, deduped by the legacy node
+   * set. When distinct directed routes collapse to that compatibility key, the
+   * retained CLD loop is marked ambiguous so SFD resolution can fail closed.
+   */
   detectLoops(): DetectedLoop[] {
     const adj = this.directAdjacency();
     const found: DetectedLoop[] = [];
@@ -158,17 +162,27 @@ export class LoopGraph {
       dfs(start, 1);
     }
 
-    const seen = new Set<string>();
-    const out: DetectedLoop[] = [];
+    const byCompatibilityKey = new Map<string, DetectedLoop>();
     for (const l of found) {
       if (l.nodeIds.length < 2) continue;
       if (new Set(l.nodeIds).size !== l.nodeIds.length) continue;
-      if (!seen.has(l.key)) {
-        seen.add(l.key);
-        out.push(l);
+      const retained = byCompatibilityKey.get(l.key);
+      if (!retained) {
+        byCompatibilityKey.set(l.key, l);
+      } else if (retained.exactKey !== l.exactKey) {
+        byCompatibilityKey.set(
+          l.key,
+          new DetectedLoop(
+            retained.nodeIds,
+            retained.type,
+            retained.canvasPath,
+            retained.identityMode,
+            true,
+          ),
+        );
       }
     }
-    return out;
+    return [...byCompatibilityKey.values()];
   }
 
   /**

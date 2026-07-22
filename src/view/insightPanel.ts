@@ -24,6 +24,7 @@ import {
   InsightDestination,
   modelHealthChecks,
   loopAnalysisWarning,
+  loopEmptyStateMessage,
   resolveInsightDestination,
 } from "../engine/insightsModel";
 
@@ -211,8 +212,9 @@ export class InsightPanel {
       sec.createDiv({ cls: "neoloopy-ip-stat is-warn", text: warning });
     }
     if (loops.length === 0) {
-      if (!warning) {
-        sec.createDiv({ cls: "neoloopy-ip-stat is-muted", text: "No feedback loops detected." });
+      const message = loopEmptyStateMessage(g, this.host.diagramMode());
+      if (message) {
+        sec.createDiv({ cls: "neoloopy-ip-stat is-muted", text: message });
       }
       return;
     }

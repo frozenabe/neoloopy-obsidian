@@ -297,6 +297,8 @@ export class DetectedLoop {
     public readonly type: LoopType,
     public readonly canvasPath?: CanvasLoopPath,
     public readonly identityMode: LoopIdentityMode = "qualitative",
+    /** Multiple directed routes collapsed to this legacy qualitative key. */
+    public readonly exactRouteAmbiguous = false,
   ) {}
 
   /** Rotation-invariant, routing-sensitive identity used for exact dedup. */

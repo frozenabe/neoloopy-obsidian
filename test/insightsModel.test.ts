@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { GraphView, VariableFile, emptyVariable } from "@neoloopy/cld-canvas";
+import {
+  DetectedLoop,
+  GraphView,
+  LoopType,
+  VariableFile,
+  emptyVariable,
+} from "@neoloopy/cld-canvas";
 import {
   INSIGHT_DESTINATIONS,
   modelHealthChecks,
   loopAnalysisWarning,
+  loopEmptyStateMessage,
   loopReportMessage,
   resolveInsightDestination,
 } from "../src/engine/insightsModel";
@@ -49,6 +56,35 @@ describe("Insights destinations", () => {
     } as unknown as GraphView;
     expect(loopReportMessage(incomplete)).toContain("1 loop: R1");
     expect(loopReportMessage(incomplete)).toContain("analysis is incomplete");
+  });
+
+  it("distinguishes an unresolved SFD representation from a true zero-loop model", () => {
+    const zero = graph([]);
+    expect(loopEmptyStateMessage(zero, "cld")).toBe(
+      "No feedback loops detected.",
+    );
+    expect(loopEmptyStateMessage(zero, "sfd")).toBe(
+      "No feedback loops detected.",
+    );
+
+    const unresolved = new DetectedLoop(
+      ["a", "b"],
+      LoopType.reinforcing,
+    );
+    const withDeclaredLoop = {
+      ...zero,
+      loops: [unresolved],
+    };
+    expect(loopEmptyStateMessage(withDeclaredLoop, "cld")).toBeNull();
+    expect(loopEmptyStateMessage(withDeclaredLoop, "sfd")).toBe(
+      "No complete loop representation is available in SFD.",
+    );
+    expect(
+      loopEmptyStateMessage(
+        { ...withDeclaredLoop, analysisError: "quant analysis incomplete" },
+        "sfd",
+      ),
+    ).toBe("No complete loop representation is available in SFD.");
   });
 });
 

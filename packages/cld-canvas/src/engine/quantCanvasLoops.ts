@@ -1,12 +1,12 @@
 /**
- * Conservative, renderer-facing discovery of executable quantitative loops.
+ * Conservative, renderer-facing resolution of qualitative and quantitative loops.
  *
  * This is deliberately not a simulation or dominance implementation. It only
- * admits a static scalar cycle when every equation dependency maps to exactly
- * one declared information connector and every flow-to-stock effect maps to one
- * unambiguous material endpoint pair supported by the SFD renderer. Any
- * incomplete analysis returns no quantitative prefix; declared qualitative
- * loops remain available unchanged.
+ * enriches a declared qualitative cycle independently when every authored leg
+ * maps to one exact visible connector or material pipe. It admits a synthesized
+ * static scalar cycle only when every equation dependency and material effect
+ * is equally exact. Incomplete quantitative analysis returns no synthesized
+ * prefix but never strips an independently resolved qualitative path.
  */
 
 import {
@@ -363,19 +363,138 @@ function parseScalarEquation(
   return { ok: true, references: refs };
 }
 
+function resolveQualitativeCanvasPath(
+  nodes: readonly VariableFile[],
+  loop: DetectedLoop,
+): DetectedLoop | null {
+  const byId = new Map<string, VariableFile>();
+  for (const node of nodes) {
+    if (byId.has(node.id)) return null;
+    byId.set(node.id, node);
+  }
+  if (loop.nodeIds.length < 2 || new Set(loop.nodeIds).size !== loop.nodeIds.length) {
+    return null;
+  }
+
+  const resolvedNodes: VariableFile[] = [];
+  for (const id of loop.nodeIds) {
+    const node = byId.get(id);
+    if (!node) return null;
+    resolvedNodes.push(node);
+  }
+
+  const legs: CanvasLoopLeg[] = [];
+  let polarityProduct = 1;
+  for (let index = 0; index < resolvedNodes.length; index++) {
+    const from = resolvedNodes[index];
+    const to = resolvedNodes[(index + 1) % resolvedNodes.length];
+    const candidates = from.links.filter((link) => link.to === to.id);
+    if (candidates.length !== 1) return null;
+    const link = candidates[0];
+    if (link.indirect || (link.polarity !== "+" && link.polarity !== "-")) {
+      return null;
+    }
+    const declaredPolarity = link.polarity === "-" ? -1 : 1;
+
+    if (from.type === "flow" && to.type === "stock") {
+      const spec = resolveFlowSpec(from, byId);
+      if (!spec) return null;
+      const drains = spec.from === to.id;
+      const fills = spec.to === to.id;
+      if (drains && fills) return null;
+      if (drains || fills) {
+        const materialPolarity = fills ? 1 : -1;
+        if (declaredPolarity !== materialPolarity) return null;
+        legs.push({
+          kind: "material",
+          fromNodeId: from.id,
+          toNodeId: to.id,
+          flowId: from.id,
+          stockId: to.id,
+          cldEdgeId: `${from.id}__${to.id}`,
+          polarity: materialPolarity,
+        });
+        polarityProduct *= materialPolarity;
+        continue;
+      }
+    }
+
+    legs.push({
+      kind: "causal",
+      fromNodeId: from.id,
+      toNodeId: to.id,
+      edgeId: `${from.id}__${to.id}`,
+      polarity: declaredPolarity,
+    });
+    polarityProduct *= declaredPolarity;
+  }
+
+  const resolvedType = polarityProduct === 1
+    ? LoopType.reinforcing
+    : LoopType.balancing;
+  if (resolvedType !== loop.type) return null;
+  return new DetectedLoop(
+    loop.nodeIds,
+    loop.type,
+    new CanvasLoopPath(legs),
+    loop.identityMode,
+    loop.exactRouteAmbiguous,
+  );
+}
+
 function qualitativeOnly(
+  nodes: readonly VariableFile[],
   qualitativeLoops: readonly DetectedLoop[],
   analysisError: string | null,
 ): CanvasLoopDiscoveryResult {
-  const seen = new Set<string>();
-  const loops = qualitativeLoops.filter((loop) => seen.add(loop.key));
+  const grouped = new Map<
+    string,
+    { retained: DetectedLoop; exactKeys: Set<string>; ambiguous: boolean }
+  >();
+  for (const loop of qualitativeLoops) {
+    const existing = grouped.get(loop.key);
+    if (!existing) {
+      grouped.set(loop.key, {
+        retained: loop,
+        exactKeys: new Set([loop.exactKey]),
+        ambiguous: loop.exactRouteAmbiguous,
+      });
+      continue;
+    }
+    existing.exactKeys.add(loop.exactKey);
+    existing.ambiguous = existing.ambiguous ||
+      loop.exactRouteAmbiguous ||
+      existing.exactKeys.size > 1;
+  }
+  const loops = [...grouped.values()].map(({ retained, ambiguous }) => {
+    if (ambiguous) {
+      return new DetectedLoop(
+        retained.nodeIds,
+        retained.type,
+        undefined,
+        retained.identityMode,
+        true,
+      );
+    }
+    return resolveQualitativeCanvasPath(nodes, retained) ??
+      (retained.canvasPath === undefined
+        ? retained
+        : new DetectedLoop(
+            retained.nodeIds,
+            retained.type,
+            undefined,
+            retained.identityMode,
+            retained.exactRouteAmbiguous,
+          ));
+  });
   return { loops, analysisError };
 }
 
 /**
  * Discover complete canvas-resolvable quantitative cycles and merge them with
- * exact qualitative counterparts. A quantitative error never suppresses or
- * mutates the pre-existing qualitative loops.
+ * exact qualitative counterparts. Declared loops are first resolved from their
+ * own authored topology, so a quantitative error never suppresses their honest
+ * CLD/SFD representation.
  */
 export function discoverCanvasLoops(
   nodes: readonly VariableFile[],
@@ -384,7 +503,7 @@ export function discoverCanvasLoops(
 ): CanvasLoopDiscoveryResult {
   const limits = options.limits ?? USER_FACING_CANVAS_LOOP_LIMITS;
   const fail = (reason: string): CanvasLoopDiscoveryResult =>
-    qualitativeOnly(qualitativeLoops, incomplete(reason, limits));
+    qualitativeOnly(nodes, qualitativeLoops, incomplete(reason, limits));
 
   if (limits.maxLoops < 1 || limits.maxEdgeVisits < 1 || limits.maxDepth < 2) {
     return fail("invalid discovery limits");
@@ -393,7 +512,9 @@ export function discoverCanvasLoops(
   const manifestQuant = options.manifest?.extra["mode"] === "quantitative" ||
     objectMap(options.manifest?.extra["quantitative"]) !== null;
   const nodeQuant = nodes.some((node) => objectMap(node.extra["quant"]) !== null);
-  if (!manifestQuant && !nodeQuant) return qualitativeOnly(qualitativeLoops, null);
+  if (!manifestQuant && !nodeQuant) {
+    return qualitativeOnly(nodes, qualitativeLoops, null);
+  }
 
   if (containsMarkedKey(options.manifest?.extra["quantitative"], ARRAY_KEYS) ||
       nodes.some((node) => containsMarkedKey(node.extra["quant"], ARRAY_KEYS))) {
@@ -628,11 +749,18 @@ export function discoverCanvasLoops(
     if (discoveryFailure) return fail(discoveryFailure);
   }
 
-  const qualitative = qualitativeOnly(qualitativeLoops, null).loops;
+  const qualitative = qualitativeOnly(nodes, qualitativeLoops, null).loops;
   const merged = [...qualitative];
+  const ambiguousQualitativeKeys = new Set(
+    qualitative
+      .filter((loop) => loop.exactRouteAmbiguous)
+      .map((loop) => loop.key),
+  );
   const qualitativeIndex = new Map(merged.map((loop, index) => [loop.exactKey, index]));
   for (const quant of [...quantByKey.values()].sort((a, b) =>
     a.nodeIds.length - b.nodeIds.length || a.exactKey.localeCompare(b.exactKey))) {
+    const compatibilityKey = new DetectedLoop(quant.nodeIds, quant.type).key;
+    if (ambiguousQualitativeKeys.has(compatibilityKey)) continue;
     const index = qualitativeIndex.get(quant.exactKey);
     if (index === undefined) {
       qualitativeIndex.set(quant.exactKey, merged.length);
