@@ -7,10 +7,11 @@
 #     trailing comment;
 #   - dependencies install from the committed lockfile via `npm ci`.
 #
-# The release is created as a DRAFT — review it, then publish it so the
-# obsidian-releases bot can see the assets. The tag MUST equal manifest.json's
-# version exactly (no leading "v") — a human responsibility; this workflow does
-# not guard it. See STORE-SUBMISSION.md.
+# Repository workflows are disabled at rest. Enable only this workflow for an
+# authorized plugin deployment window, push the release tag, and disable it
+# again immediately after the release completes. The tag MUST equal
+# manifest.json's version exactly (no leading "v"). The workflow publishes the
+# release immediately so Obsidian can see the assets.
 #
 # Each asset gets a signed GitHub build-provenance attestation, so anyone can
 # cryptographically verify it was built from this source by this workflow:

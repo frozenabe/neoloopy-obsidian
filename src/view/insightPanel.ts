@@ -15,6 +15,7 @@ import {
   LoopType,
   ParentAnchor,
   endogeneity,
+  loopsForMode,
 } from "@neoloopy/cld-canvas";
 import { RefModeRow, referenceModeRows } from "../engine/panelModel";
 import {
@@ -22,6 +23,7 @@ import {
   HealthCheck,
   InsightDestination,
   modelHealthChecks,
+  loopAnalysisWarning,
   resolveInsightDestination,
 } from "../engine/insightsModel";
 
@@ -83,9 +85,10 @@ export class InsightPanel {
     head.createSpan({ cls: "neoloopy-ip-title", text: "Insights" });
     if (g?.quant) head.createSpan({ cls: "neoloopy-ip-quant-pill", text: "Quant" });
     this.renderDiagramToggle(head);
+    const visibleLoops = g ? loopsForMode(g.loops, this.host.diagramMode()) : [];
     head.createSpan({
       cls: "neoloopy-ip-count",
-      text: g ? `${g.loops.length} loop${g.loops.length === 1 ? "" : "s"}` : "",
+      text: g ? `${visibleLoops.length} loop${visibleLoops.length === 1 ? "" : "s"}` : "",
     });
 
     if (!g) {
@@ -200,11 +203,17 @@ export class InsightPanel {
   }
 
   private renderLoops(parent: HTMLElement, g: GraphView): void {
-    const loops = g.loops;
+    const loops = loopsForMode(g.loops, this.host.diagramMode());
     const selected = this.host.selectedLoop();
     const sec = this.section(parent, "Loops");
+    const warning = loopAnalysisWarning(g);
+    if (warning) {
+      sec.createDiv({ cls: "neoloopy-ip-stat is-warn", text: warning });
+    }
     if (loops.length === 0) {
-      sec.createDiv({ cls: "neoloopy-ip-stat is-muted", text: "No feedback loops detected." });
+      if (!warning) {
+        sec.createDiv({ cls: "neoloopy-ip-stat is-muted", text: "No feedback loops detected." });
+      }
       return;
     }
     for (const l of loops) {

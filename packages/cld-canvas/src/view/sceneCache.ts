@@ -20,8 +20,10 @@ import {
   buildEdgeGeoms,
   buildNodeBoxes,
   buildSfdPipeGeoms,
+  collectCldMaterialProjectionEdges,
   collectInfoEdges,
   computeBadges,
+  loopsForMode,
   sceneBounds,
   sfdRenderPositions,
 } from "./geometry";
@@ -108,9 +110,13 @@ export class SceneCache {
       (s) => this.measure(s),
       mode === "sfd" ? sfdRenderPositions(graph.nodes) : undefined,
     );
-    const edges = buildEdgeGeoms(collectInfoEdges(graph.nodes, mode), boxes, bowSigns);
+    const edgeRefs = collectInfoEdges(graph.nodes, mode);
+    if (mode === "cld") {
+      edgeRefs.push(...collectCldMaterialProjectionEdges(graph.nodes, graph.loops));
+    }
+    const edges = buildEdgeGeoms(edgeRefs, boxes, bowSigns);
     const pipes = mode === "sfd" ? buildSfdPipeGeoms(graph.nodes, boxes) : [];
-    const loops = mode === "sfd" ? [] : graph.loops;
+    const loops = loopsForMode(graph.loops, mode);
     const badges = computeBadges(loops, boxes, badgeOverrides);
     this.scene = {
       mode,
@@ -176,7 +182,16 @@ export class SceneCache {
     parts.push("|");
     for (const [k, p] of badgeOverrides) parts.push(`${k}=${p.x},${p.y}`);
     parts.push("|");
-    for (const l of graph.loops) parts.push(l.key);
+    for (const l of graph.loops) {
+      parts.push(l.key);
+      for (const leg of l.canvasPath?.legs ?? []) {
+        parts.push(
+          leg.kind === "causal"
+            ? `c:${leg.edgeId}`
+            : `m:${leg.flowId}>${leg.stockId}:${leg.cldEdgeId}:${leg.polarity}`,
+        );
+      }
+    }
     return parts.join(";");
   }
 }

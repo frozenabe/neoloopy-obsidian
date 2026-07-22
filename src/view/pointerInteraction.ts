@@ -34,7 +34,7 @@ export interface PointerHost {
   selection(): { node: string | null; edge: string | null; loop: string | null };
   hasFolder(): boolean;
   /** Session-only loop-badge positions; a badge drag writes here directly. */
-  readonly loopBadgeOverrides: Map<string, Point>;
+  loopBadgeOverrides(): Map<string, Point>;
   listen(el: HTMLElement, type: string, cb: (e: Event) => void, options?: AddEventListenerOptions): void;
 
   select(node: string | null, edge: string | null, loop: string | null): void;
@@ -209,7 +209,7 @@ export class PointerInteraction {
         this.host.rebuildScene();
       }
     } else if (this.mode === "moveBadge" && this.moved && this.dragLoopKey) {
-      this.host.loopBadgeOverrides.set(this.dragLoopKey, camera.toWorld(p.x, p.y));
+      this.host.loopBadgeOverrides().set(this.dragLoopKey, camera.toWorld(p.x, p.y));
       this.host.rebuildScene();
     } else if (this.mode === "drawLink" && scene) {
       const world = camera.toWorld(p.x, p.y);

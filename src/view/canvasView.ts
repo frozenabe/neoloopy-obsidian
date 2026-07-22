@@ -26,11 +26,11 @@ import {
 import type NeoloopyPlugin from "../main";
 import {
   Camera,
+  DetectedLoop,
   DiagramViewMode,
   EdgeGeom,
   GraphView,
   LoopHighlight,
-  LoopType,
   ParentAnchor,
   Point,
   QuantPatch,
@@ -40,12 +40,12 @@ import {
   Theme,
   extraWithSfdPosition,
   linkPointsToModel,
-  loopEdgeIds,
+  loopHighlightFor,
   paint,
   parentPath,
+  resolvedLoopNoteKey,
   resolveTheme,
 } from "@neoloopy/cld-canvas";
-import { loopNoteKey } from "./loopKeys";
 import { InsightPanel } from "./insightPanel";
 import { CanvasToolbar } from "./canvasToolbar";
 import { SelectionChrome } from "./selectionChrome";
@@ -56,6 +56,7 @@ import { ModelController } from "./modelController";
 import { LiveEditWatcher } from "./liveEditWatcher";
 import { SelectionAnimator } from "./selectionAnimator";
 import { reconcileActiveModel } from "./modelPicker";
+import { loopReportMessage } from "../engine/insightsModel";
 
 export const VIEW_TYPE_CANVAS = "neoloopy-canvas";
 
@@ -90,7 +91,15 @@ export class CanvasView extends ItemView {
 
   /** User-dragged loop-badge positions (loop.key → world point). Session-only,
    *  matching the app's `loopBadgeOverrides` — never written to the vault. */
-  private readonly loopBadgeOverrides = new Map<string, Point>();
+  private readonly cldLoopBadgeOverrides = new Map<string, Point>();
+  /** SFD geometry is independent of CLD geometry, so badge drags are too. */
+  private readonly sfdLoopBadgeOverrides = new Map<string, Point>();
+
+  private activeLoopBadgeOverrides(): Map<string, Point> {
+    return this.diagramMode === "sfd"
+      ? this.sfdLoopBadgeOverrides
+      : this.cldLoopBadgeOverrides;
+  }
 
   // Pointer state machine (pan/zoom/pinch/move/draw-link/bow-edge) and the
   // app-parity keyboard handler, each owning its own transient state.
@@ -128,7 +137,7 @@ export class CanvasView extends ItemView {
   // and trash FAB) is owned by SelectionChrome — a screen-space HTML overlay
   // layered over the canvas. Public so the view-smoke harness can poke it.
   chrome!: SelectionChrome;
-  /** model.json loop notes for the open model, by Dart loop key (note-state cue). */
+  /** Loop notes for the open model, by its compatibility-safe cache key. */
   private loopNotesCache: Record<string, string> = {};
   /** Parent-system anchors for the open model, recomputed on each model open. */
   private parentsCache: ParentAnchor[] = [];
@@ -137,12 +146,8 @@ export class CanvasView extends ItemView {
    *  `css-change` (theme/appearance switch). `resolveTheme()` reads CSS vars
    *  off the document, so recomputing it every frame is pure waste. */
   private themeCache: Theme | null = null;
-  /** Dart loop-key memo (engine loop key → canonical note key), rebuilt on each
-   *  graph reload. `dartLoopKey` runs on every overlay frame per loop; the
-   *  derivation does an O(n) label lookup per member id, so memoizing it removes
-   *  per-frame work that only changes when the graph does. */
+  /** Cache note keys derived from labels; cleared whenever the graph reloads. */
   private readonly loopKeyMemo = new Map<string, string>();
-
   constructor(leaf: WorkspaceLeaf, plugin: NeoloopyPlugin) {
     super(leaf);
     this.plugin = plugin;
@@ -220,7 +225,8 @@ export class CanvasView extends ItemView {
       selection: () => ({ node: this.selNode, edge: this.selEdge, loop: this.selLoop }),
       isIdle: () => this.pointer.isIdle(),
       selectedEdgeGeom: () => this.selectedEdgeGeom(),
-      loopHasNote: (lp) => (this.loopNotesCache[this.dartLoopKey(lp)] ?? "").trim().length > 0,
+      loopHasNote: (lp) =>
+        (this.loopNotesCache[this.loopNoteCacheKey(lp)] ?? "").trim().length > 0,
       listen: (el, type, cb) => this.registerDomEvent(el, type as keyof HTMLElementEventMap, cb),
       setNodeType: (id, t) => void this.setNodeType(id, t),
       setFlowEndpoints: (id, from, to) => void this.setFlowEndpoints(id, from, to),
@@ -264,7 +270,7 @@ export class CanvasView extends ItemView {
       graph: () => this.graph,
       selection: () => ({ node: this.selNode, edge: this.selEdge, loop: this.selLoop }),
       hasFolder: () => this.folder !== null,
-      loopBadgeOverrides: this.loopBadgeOverrides,
+      loopBadgeOverrides: () => this.activeLoopBadgeOverrides(),
       listen: (el, type, cb, opts) =>
         this.registerDomEvent(el, type as keyof HTMLElementEventMap, cb, opts),
       select: (node, edge, loop) => this.select(node, edge, loop),
@@ -369,15 +375,7 @@ export class CanvasView extends ItemView {
       new Notice("No model open.");
       return;
     }
-    const loops = this.graph.loops;
-    if (loops.length === 0) {
-      new Notice("No feedback loops detected.");
-      return;
-    }
-    const labels = loops
-      .map((l) => this.graph?.labels.get(l.key) ?? "?")
-      .sort();
-    new Notice(`${loops.length} loop${loops.length === 1 ? "" : "s"}: ${labels.join(", ")}`);
+    new Notice(loopReportMessage(this.graph));
   }
 
 
@@ -396,7 +394,8 @@ export class CanvasView extends ItemView {
     this.select(null, null, null);
     this.keyboard.reset();
     this.bowSigns.clear();
-    this.loopBadgeOverrides.clear();
+    this.cldLoopBadgeOverrides.clear();
+    this.sfdLoopBadgeOverrides.clear();
     this.fittedOnce = false;
     const mem = viewMemory.get(folder);
     if (mem) {
@@ -465,7 +464,6 @@ export class CanvasView extends ItemView {
       return;
     }
     this.graph = await this.plugin.engine.loadGraph(this.folder);
-    // The graph's labels (and thus every derived loop key) may have changed.
     this.loopKeyMemo.clear();
     this.loopNotesCache = await this.plugin.engine
       .getLoopNotes(this.folder)
@@ -474,7 +472,10 @@ export class CanvasView extends ItemView {
     // Drop selection that no longer exists.
     if (this.selNode && !this.graph.nodes.some((n) => n.id === this.selNode))
       this.selNode = null;
-    if (this.selLoop && !this.graph.loops.some((l) => l.key === this.selLoop))
+    if (this.selEdge && !this.scene?.edges.some((edge) =>
+      edge.id === this.selEdge && edge.renderOnly !== true))
+      this.selEdge = null;
+    if (this.selLoop && !this.scene?.loops.some((loop) => loop.key === this.selLoop))
       this.selLoop = null;
     this.computeLoopHighlight();
     this.insightPanelView.render();
@@ -483,7 +484,12 @@ export class CanvasView extends ItemView {
   /** Rebuild the renderable scene through the cache (label-width memo +
    *  dirty-tracking); the cache returns the same scene when nothing moved. */
   private rebuildScene(): void {
-    this.scene = this.sceneCache.build(this.graph, this.bowSigns, this.loopBadgeOverrides, this.diagramMode);
+    this.scene = this.sceneCache.build(
+      this.graph,
+      this.bowSigns,
+      this.activeLoopBadgeOverrides(),
+      this.diagramMode,
+    );
   }
 
   private async newModel(): Promise<void> {
@@ -704,7 +710,13 @@ export class CanvasView extends ItemView {
   private setDiagramMode(mode: DiagramViewMode): void {
     if (this.diagramMode === mode) return;
     this.diagramMode = mode;
-    this.select(null, null, null);
+    const selected = this.selLoop
+      ? this.graph?.loops.find((loop) => loop.key === this.selLoop) ?? null
+      : null;
+    const keepLoop = selected && (mode === "cld" || selected.canvasPath?.hasMaterialLeg)
+      ? selected.key
+      : null;
+    this.select(null, null, keepLoop);
     this.bowSigns.clear();
     this.rebuildScene();
     this.insightPanelView.render();
@@ -1126,7 +1138,8 @@ export class CanvasView extends ItemView {
       await this.reloadGraph();
       this.render();
     } else if (this.selEdge && this.scene) {
-      const g = this.scene.edges.find((x) => x.id === this.selEdge);
+      const g = this.scene.edges.find((x) =>
+        x.id === this.selEdge && x.renderOnly !== true);
       if (g) {
         await this.model.removeLink(this.folder, g.source, g.target);
         this.selEdge = null;
@@ -1369,32 +1382,28 @@ export class CanvasView extends ItemView {
       return;
     }
     const lp = this.graph.loops.find((l) => l.key === this.selLoop);
-    this.loopHi = lp
-      ? { edgeIds: loopEdgeIds(lp), nodeIds: new Set(lp.nodeIds), type: lp.type }
-      : null;
+    this.loopHi = loopHighlightFor(lp ?? null);
   }
 
   private selectedEdgeGeom(): EdgeGeom | null {
     if (!this.selEdge || !this.scene) return null;
-    return this.scene.edges.find((e) => e.id === this.selEdge) ?? null;
+    return this.scene.edges.find((e) =>
+      e.id === this.selEdge && e.renderOnly !== true) ?? null;
   }
 
   /**
-   * The `model.json` loopNotes key for a loop — `<R|B>:<sorted unique variable
-   * names>`, matching the engine's `loopKey`/Dart `loopNoteKey` so the note
-   * shows in the app too. Resolves ids with `?? id` (not `|| id`) so an empty
-   * label stays empty rather than falling back to the id. Derivation lives in
-   * the shared `loopKeys` helper so the view and engine never drift.
-   *
-   * Memoized per loop (keyed by type + member ids, which the cache derivation is
-   * cheap to build); the memo is cleared on every graph reload, so a label edit
-   * recomputes the key.
+   * Existing qualitative notes stay keyed by the established sorted-label key.
+   * Quantitative-only loops use their exact directed key so two executable
+   * routes through the same member set cannot share note state.
    */
-  private dartLoopKey(lp: { nodeIds: string[]; type: LoopType }): string {
-    const memoKey = `${lp.type}:${lp.nodeIds.join(",")}`;
+  private loopNoteCacheKey(lp: DetectedLoop): string {
+    const memoKey = `${lp.identityMode}:${lp.exactKey}`;
     let key = this.loopKeyMemo.get(memoKey);
     if (key === undefined) {
-      key = loopNoteKey(lp, (id) => this.graph?.nodes.find((n) => n.id === id)?.label ?? id);
+      key = resolvedLoopNoteKey(
+        lp,
+        (id) => this.graph?.nodes.find((node) => node.id === id)?.label ?? id,
+      );
       this.loopKeyMemo.set(memoKey, key);
     }
     return key;
@@ -1410,10 +1419,10 @@ export class CanvasView extends ItemView {
     if (!this.folder || !this.graph) return;
     const lp = this.graph.loops.find((l) => l.key === loopKey);
     if (!lp) return;
-    const dartKey = this.dartLoopKey(lp);
+    const noteKey = this.loopNoteCacheKey(lp);
     this.liveWatcher.markSelfWrite();
     const path = await this.plugin.engine
-      .loopNotePath(this.folder, dartKey)
+      .loopNotePath(this.folder, noteKey)
       .catch(() => null);
     this.liveWatcher.markSelfWrite();
     if (!path) return;

@@ -44,6 +44,7 @@ import {
   normalizeConfidence,
 } from "./types";
 import { LoopGraph, labelLoopsByKey } from "./loopGraph";
+import { discoverCanvasLoops } from "./quantCanvasLoops";
 import { YamlParse, parseNote, serializeNote, splitFrontmatter } from "./noteCodec";
 import { noteSlug, noteUnslug } from "./noteNaming";
 import {
@@ -55,7 +56,7 @@ import {
   serializeLoopNote,
 } from "./loopNote";
 import { contentSignature, stampMeta, WRITE_SOURCE_PLUGIN } from "./specHash";
-import { loopEchoLabel, loopKey } from "./loopKey";
+import { loopEchoLabel, resolvedLoopNoteKey } from "./loopKey";
 import { autoLayout } from "./layout";
 import {
   ExportEdge,
@@ -99,6 +100,10 @@ const SPECIAL_NOTES = new Set(["System.md", "Futures.md", "CLA.md"]);
 
 const MAX_SCAN_DEPTH = 12;
 
+function loopTypeLetter(loop: DetectedLoop): "R" | "B" {
+  return loop.type === LoopType.reinforcing ? "R" : "B";
+}
+
 export interface NativeEngineOptions {
   /** Vault-relative base folder for newly created models (may be ""). */
   modelsRoot: string;
@@ -141,11 +146,20 @@ export class NativeEngine implements NeoloopyEngine {
     const manifest = await this.readManifest(folder);
     const nodes = await this.loadNotes(folder);
     const graph = new LoopGraph(nodes);
-    const loops = graph.detectLoops();
+    const discovered = discoverCanvasLoops(nodes, graph.detectLoops(), { manifest });
+    const loops = discovered.loops;
     const labels = labelLoopsByKey(loops, (id) => graph.node(id)?.label ?? id);
     const quant =
       manifestIsQuant(manifest) || nodes.some((n) => "quant" in n.extra);
-    return { folder, manifest, nodes, loops, labels, quant };
+    return {
+      folder,
+      manifest,
+      nodes,
+      loops,
+      labels,
+      quant,
+      analysisError: discovered.analysisError,
+    };
   }
 
   // ---- model lifecycle -----------------------------------------------------
@@ -640,8 +654,22 @@ export class NativeEngine implements NeoloopyEngine {
   // filename or the labels. The legacy `model.json` maps (loopNotes/loopTitles/
   // loopValence/loopArchetypes) are auto-migrated to files on first touch. This
   // mirrors `core/lib/cli/vault_engine.dart` so the plugin and the app/CLI agree
-  // on one vault. Resolved maps stay keyed by the legacy `<R|B>:<sorted labels>`
-  // key (see `loopKey`) so existing UI consumers are unchanged.
+  // on one vault. Qualitative resolved maps retain the legacy sorted-label key;
+  // quantitative-only loops use their exact directed id so routes cannot fold.
+
+  private async liveLoopContext(folder: string): Promise<{
+    loops: DetectedLoop[];
+    nameOf: (id: string) => string;
+  }> {
+    const manifest = await this.readManifest(folder);
+    const nodes = await this.loadNotes(folder);
+    const graph = new LoopGraph(nodes);
+    const loops = discoverCanvasLoops(nodes, graph.detectLoops(), { manifest }).loops;
+    return {
+      loops,
+      nameOf: (id: string): string => graph.node(id)?.label ?? id,
+    };
+  }
 
   async getLoopNotes(folder: string): Promise<Record<string, string>> {
     await this.migrateLoopNotesIfNeeded(folder);
@@ -655,12 +683,11 @@ export class NativeEngine implements NeoloopyEngine {
       }
       return out;
     }
-    const graph = new LoopGraph(await this.loadNotes(folder));
-    const nameOf = (id: string): string => graph.node(id)?.label ?? id;
+    const { loops, nameOf } = await this.liveLoopContext(folder);
     const out: Record<string, string> = {};
     const matched = new Set<string>();
-    for (const l of graph.detectLoops()) {
-      const type = l.type === LoopType.reinforcing ? "R" : "B";
+    for (const l of loops) {
+      const type = loopTypeLetter(l);
       let note: LoopNote | undefined;
       for (const f of files) {
         if (matched.has(f)) continue;
@@ -673,7 +700,7 @@ export class NativeEngine implements NeoloopyEngine {
       }
       if (!note) continue;
       if (note.body.trim().length > 0) {
-        out[loopKey(l.nodeIds.map(nameOf), type)] = note.body;
+        out[resolvedLoopNoteKey(l, nameOf)] = note.body;
       }
     }
     return out;
@@ -691,22 +718,20 @@ export class NativeEngine implements NeoloopyEngine {
    */
   async loopNotePath(folder: string, key: string): Promise<string | null> {
     await this.migrateLoopNotesIfNeeded(folder);
-    const graph = new LoopGraph(await this.loadNotes(folder));
-    const nameOf = (id: string): string => graph.node(id)?.label ?? id;
-    for (const l of graph.detectLoops()) {
-      const type = l.type === LoopType.reinforcing ? "R" : "B";
-      const memberLabels = l.nodeIds.map(nameOf);
-      if (loopKey(memberLabels, type) !== key) continue;
-      for (const f of await this.listLoopNoteFiles(folder)) {
-        const parsed = parseLoopNote((await this.readLoopNoteFile(folder, f)) ?? "", this.yaml);
-        if (loopMatchesNote(type, l.nodeIds, parsed)) {
-          return joinPath(this.loopsDir(folder), f);
-        }
+    const { loops, nameOf } = await this.liveLoopContext(folder);
+    const matches = loops.filter((loop) => resolvedLoopNoteKey(loop, nameOf) === key);
+    if (matches.length !== 1) return null;
+    const l = matches[0];
+    const type = loopTypeLetter(l);
+    const memberLabels = l.nodeIds.map(nameOf);
+    for (const f of await this.listLoopNoteFiles(folder)) {
+      const parsed = parseLoopNote((await this.readLoopNoteFile(folder, f)) ?? "", this.yaml);
+      if (loopMatchesNote(type, l.nodeIds, parsed)) {
+        return joinPath(this.loopsDir(folder), f);
       }
-      const file = await this.writeLoopFile(folder, l.nodeIds, type, memberLabels, {});
-      return joinPath(this.loopsDir(folder), file);
     }
-    return null;
+    const file = await this.writeLoopFile(folder, l.nodeIds, type, memberLabels, {});
+    return joinPath(this.loopsDir(folder), file);
   }
 
   async ensureSystemNote(folder: string): Promise<string> {
@@ -995,7 +1020,7 @@ export class NativeEngine implements NeoloopyEngine {
    * One-way, idempotent migration of legacy loop annotations from the
    * `model.json` maps into `Loops/*.md` files. Guard: if any `Loops/` file
    * exists the model is treated as migrated and this returns immediately. Each
-   * legacy key is matched to a live loop by its `loopKey`; a matched key keeps
+   * legacy key is matched to a live loop by its resolved note key; a match keeps
    * the loop's canonical member ids, an unmatched key becomes a pre-flagged
    * orphan (`members: []`, original key kept in `loop:`) so nothing is lost.
    * After writing, the four legacy keys are stripped from the manifest.
@@ -1026,17 +1051,16 @@ export class NativeEngine implements NeoloopyEngine {
       ...Object.keys(archetypes),
     ]);
 
-    const graph = new LoopGraph(await this.loadNotes(folder));
-    const nameOf = (id: string): string => graph.node(id)?.label ?? id;
-    const liveByKey = new Map<string, DetectedLoop>();
-    for (const l of graph.detectLoops()) {
-      const type = l.type === LoopType.reinforcing ? "R" : "B";
-      liveByKey.set(loopKey(l.nodeIds.map(nameOf), type), l);
+    const { loops, nameOf } = await this.liveLoopContext(folder);
+    const liveByKey = new Map<string, DetectedLoop | null>();
+    for (const l of loops) {
+      const key = resolvedLoopNoteKey(l, nameOf);
+      liveByKey.set(key, liveByKey.has(key) ? null : l);
     }
 
     for (const key of allKeys) {
       const type = key.startsWith("B") ? "B" : "R";
-      const live = liveByKey.get(key);
+      const live = liveByKey.get(key) ?? undefined;
       const members = live ? canonicalLoopMembers(live.nodeIds) : [];
       const labels = live
         ? live.nodeIds.map(nameOf)
@@ -1067,7 +1091,7 @@ export class NativeEngine implements NeoloopyEngine {
     });
   }
 
-  /** Find the live loop whose `loopKey` == `key`, then upsert its file. No-op
+  /** Find the live loop whose resolved note key == `key`, then upsert its file. No-op
    * (and no file) when the graph carries no such loop. */
   private async upsertLoopFileByKey(
     folder: string,
@@ -1075,15 +1099,17 @@ export class NativeEngine implements NeoloopyEngine {
     fields: LoopFields,
   ): Promise<void> {
     await this.migrateLoopNotesIfNeeded(folder);
-    const graph = new LoopGraph(await this.loadNotes(folder));
-    const nameOf = (id: string): string => graph.node(id)?.label ?? id;
-    for (const l of graph.detectLoops()) {
-      const type = l.type === LoopType.reinforcing ? "R" : "B";
-      const memberLabels = l.nodeIds.map(nameOf);
-      if (loopKey(memberLabels, type) !== key) continue;
-      await this.writeLoopFile(folder, l.nodeIds, type, memberLabels, fields);
-      return;
-    }
+    const { loops, nameOf } = await this.liveLoopContext(folder);
+    const matches = loops.filter((loop) => resolvedLoopNoteKey(loop, nameOf) === key);
+    if (matches.length !== 1) return;
+    const loop = matches[0];
+    await this.writeLoopFile(
+      folder,
+      loop.nodeIds,
+      loopTypeLetter(loop),
+      loop.nodeIds.map(nameOf),
+      fields,
+    );
   }
 
   /** Find-or-create the identity-matched `Loops/` file and apply `fields`
@@ -1377,7 +1403,7 @@ function toExportGraph(view: GraphView): {
         id: `${n.id}__${l.to}`,
         source: n.id,
         target: l.to,
-        polarity: l.polarity === "-" ? -1 : 1,
+        polarity: l.polarity === "-" ? -1 : l.polarity === "+" ? 1 : "?",
         delay: l.delay,
         curvature: l.curvature,
         dashed: l.indirect,

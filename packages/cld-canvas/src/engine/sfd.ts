@@ -96,6 +96,7 @@ export function flowTouches(flow: VariableFile, byId: Map<string, VariableFile>)
   for (const l of flow.links) {
     const t = byId.get(l.to);
     if (t?.type !== "stock") continue;
+    if (l.polarity !== "+" && l.polarity !== "-") continue;
     out.push({ stockId: l.to, sign: l.polarity === "-" ? -1 : 1 });
   }
   return out;

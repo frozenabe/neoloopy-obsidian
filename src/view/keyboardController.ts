@@ -16,6 +16,10 @@ import { App } from "obsidian";
 import { ShortcutsModal } from "./dialogs";
 import { Camera, GraphView, Point, Scene } from "@neoloopy/cld-canvas";
 import { routeKey, stepId } from "./keyRouting";
+import {
+  keyboardSelectableEdges,
+  keyboardSelectableLoopKeys,
+} from "./keyboardVisibility";
 
 /** What the keyboard controller needs from the canvas view. */
 export interface KeyboardHost {
@@ -205,9 +209,7 @@ export class KeyboardController {
     if (!scene) return;
     const sel = this.host.selection();
     const anchor = sel.node ?? this.navAnchor;
-    const pool = anchor
-      ? scene.edges.filter((e) => e.source === anchor || e.target === anchor)
-      : scene.edges;
+    const pool = keyboardSelectableEdges(scene, anchor);
     if (pool.length === 0) return;
     this.navAnchor = anchor;
     const next = stepId(pool.map((e) => e.id), sel.edge, dir);
@@ -220,12 +222,12 @@ export class KeyboardController {
 
   /** O / Shift+O: cycle loop badges. */
   private kbSelectLoopStep(dir: number): void {
-    const graph = this.host.graph();
-    if (!graph) return;
-    const next = stepId(graph.loops.map((l) => l.key), this.host.selection().loop, dir);
+    const scene = this.host.scene();
+    if (!scene) return;
+    const next = stepId(keyboardSelectableLoopKeys(scene), this.host.selection().loop, dir);
     if (next === null) return;
     this.host.select(null, null, next);
-    const b = this.host.scene()?.badges.get(next);
+    const b = scene.badges.get(next);
     if (b) this.ensureVisible(b);
     this.host.render();
   }

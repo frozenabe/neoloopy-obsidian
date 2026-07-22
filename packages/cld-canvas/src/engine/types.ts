@@ -35,7 +35,8 @@ export enum LoopType {
  */
 export interface VaultLink {
   to: string;
-  polarity: "+" | "-";
+  /** `?` is preserved unknown-sign input and never participates in a loop. */
+  polarity: "+" | "-" | "?";
   delay: boolean;
   indirect: boolean;
   nonlinear: boolean;
@@ -61,9 +62,14 @@ export function normalizeBasis(v: unknown): string | undefined {
 
 export function linkFromMap(m: Record<string, unknown>): VaultLink {
   const pol = m["polarity"];
+  const hasPolarity = Object.prototype.hasOwnProperty.call(m, "polarity");
   return {
     to: String(m["to"]),
-    polarity: pol === "-" || pol === -1 ? "-" : "+",
+    polarity: pol === "-" || pol === -1
+      ? "-"
+      : pol === "+" || pol === 1 || !hasPolarity
+        ? "+"
+        : "?",
     delay: m["delay"] === true,
     indirect: m["indirect"] === true,
     nonlinear: m["nonlinear"] === true,
@@ -210,13 +216,102 @@ export function manifestToJson(m: ModelManifest): Record<string, unknown> {
   return { ...out, ...m.extra };
 }
 
+export type CanvasLoopLegKind = "causal" | "material";
+
+/** One exact declared information connector in a resolved executable cycle. */
+export interface CausalCanvasLoopLeg {
+  readonly kind: "causal";
+  readonly fromNodeId: string;
+  readonly toNodeId: string;
+  readonly edgeId: string;
+  readonly polarity: 1 | -1;
+}
+
+/**
+ * One exact first-class flow/stock pipe leg in a resolved executable cycle.
+ * `cldEdgeId` is either the matching declared connector or the deterministic,
+ * non-persistent CLD projection that represents this material effect.
+ */
+export interface MaterialCanvasLoopLeg {
+  readonly kind: "material";
+  readonly fromNodeId: string;
+  readonly toNodeId: string;
+  readonly flowId: string;
+  readonly stockId: string;
+  readonly cldEdgeId: string;
+  readonly polarity: 1 | -1;
+}
+
+export type CanvasLoopLeg = CausalCanvasLoopLeg | MaterialCanvasLoopLeg;
+
+/**
+ * A complete executable cycle resolved to exact visible canvas elements.
+ * Partial paths are never represented.
+ */
+export class CanvasLoopPath {
+  public readonly legs: readonly CanvasLoopLeg[];
+
+  constructor(legs: readonly CanvasLoopLeg[]) {
+    this.legs = Object.freeze([...legs]);
+  }
+
+  get hasMaterialLeg(): boolean {
+    return this.legs.some((leg) => leg.kind === "material");
+  }
+}
+
+/** Rotate a directed cycle to its lexicographically smallest rotation. */
+export function canonicalDirectedCycle(nodeIds: Iterable<string>): string[] {
+  const nodes = [...nodeIds];
+  if (nodes.length > 1 && nodes[0] === nodes[nodes.length - 1]) nodes.pop();
+  if (nodes.length === 0) return [];
+
+  const compareRotation = (a: number, b: number): number => {
+    for (let offset = 0; offset < nodes.length; offset++) {
+      const left = nodes[(a + offset) % nodes.length];
+      const right = nodes[(b + offset) % nodes.length];
+      if (left < right) return -1;
+      if (left > right) return 1;
+    }
+    return 0;
+  };
+
+  let best = 0;
+  for (let candidate = 1; candidate < nodes.length; candidate++) {
+    if (compareRotation(candidate, best) < 0) best = candidate;
+  }
+  return [...nodes.slice(best), ...nodes.slice(0, best)];
+}
+
+/** Rotation-invariant and routing-sensitive identity for a directed cycle. */
+export function directedCycleKey(nodeIds: Iterable<string>): string {
+  return canonicalDirectedCycle(nodeIds).map(encodeURIComponent).join(">");
+}
+
+export type LoopIdentityMode = "qualitative" | "quantitative";
+
 /** A detected feedback loop: variable ids in cycle order + R/B classification. */
 export class DetectedLoop {
-  constructor(public readonly nodeIds: string[], public readonly type: LoopType) {}
+  constructor(
+    public readonly nodeIds: string[],
+    public readonly type: LoopType,
+    public readonly canvasPath?: CanvasLoopPath,
+    public readonly identityMode: LoopIdentityMode = "qualitative",
+  ) {}
 
-  /** Stable identity = type + the sorted unique node ids (one badge per loop). */
+  /** Rotation-invariant, routing-sensitive identity used for exact dedup. */
+  get exactKey(): string {
+    const prefix = this.type === LoopType.reinforcing ? "R" : "B";
+    return `${prefix}:${directedCycleKey(this.nodeIds)}`;
+  }
+
+  /**
+   * Qualitative loops retain the package's established numeric-type/sorted-id
+   * key. Quantitative-only badges use the exact directed key so distinct
+   * executable routings through the same nodes cannot collide.
+   */
   get key(): string {
-    const names = [...this.nodeIds].sort();
-    return `${this.type}:${names.join("|")}`;
+    if (this.identityMode === "quantitative") return this.exactKey;
+    return `${this.type}:${[...this.nodeIds].sort().join("|")}`;
   }
 }

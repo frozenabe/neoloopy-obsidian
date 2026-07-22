@@ -908,6 +908,7 @@
 }
 .neoloopy-ip-stat { color: var(--text-muted); padding: 2px 0; }
 .neoloopy-ip-stat.is-muted { color: var(--text-faint); font-size: 11px; }
+.neoloopy-ip-stat.is-warn { color: var(--text-warning); }
 
 .neoloopy-ip-loop {
   display: flex; align-items: center; gap: 8px; padding: 6px 4px;

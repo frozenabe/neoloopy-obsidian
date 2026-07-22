@@ -43,6 +43,8 @@ export interface GraphView {
   /** loop.key -> "R1" / "B2" badge label. */
   labels: Map<string, string>;
   quant: boolean;
+  /** Non-null when quantitative canvas-loop discovery could not complete. */
+  analysisError?: string | null;
 }
 
 export interface NewVariable {
@@ -223,10 +225,10 @@ export interface NeoloopyEngine {
 
   /**
    * Loop notes — one `Loops/<slug>.md` file per feedback loop, identity-anchored
-   * in frontmatter (the same files the Dart app/CLI write). Resolved into a map
-   * keyed by `<R|B>:<sorted unique variable names>` so both surfaces agree.
-   * `getLoopNotes` returns the body text per live loop; `setLoopNote` writes it
-   * into the identity-matched file (preserving title/valence/archetype).
+   * in frontmatter (the same files the Dart app/CLI write). Qualitative entries
+   * retain the established `<R|B>:<sorted unique variable names>` map key;
+   * quantitative-only entries use their exact directed `loop.key` so distinct
+   * routes cannot collide. `setLoopNote` accepts that one resolved key.
    */
   getLoopNotes(folder: string): Promise<Record<string, string>>;
   setLoopNote(folder: string, key: string, text: string): Promise<void>;

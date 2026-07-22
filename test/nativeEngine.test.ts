@@ -10,6 +10,7 @@ import {
   joinPath,
   parseLoopNote,
   parseNote,
+  resolvedLoopNoteKey,
   serializeNote,
 } from "@neoloopy/cld-canvas";
 
@@ -378,6 +379,117 @@ describe("NativeEngine — link curvature & loop notes", () => {
 });
 
 describe("NativeEngine — loop notes as Loops/*.md files", () => {
+  it("loads and annotates an exact quantitative-only stock-drain loop", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("Quant loop");
+    const stock = await engine.addVariable(folder, { label: "Storage", type: "stock" });
+    const drain = await engine.addVariable(folder, { label: "Drain", type: "flow" });
+    await engine.setEquation(folder, stock.id, { initial: "100" });
+    await engine.setEquation(folder, drain.id, { equation: "Storage / 10" });
+    await engine.setFlowEndpoints(folder, drain.id, stock.id, SINK_CLOUD);
+    await engine.addLink(folder, stock.id, drain.id, { polarity: "+" });
+
+    const view = await engine.loadGraph(folder);
+    expect(view.analysisError).toBeNull();
+    expect(view.loops).toHaveLength(1);
+    const loop = view.loops[0];
+    expect(loop.identityMode).toBe("quantitative");
+    expect(loop.key).toBe(loop.exactKey);
+    expect(loop.key).toMatch(/^B:/);
+    expect(loop.canvasPath?.hasMaterialLeg).toBe(true);
+
+    await engine.setLoopNote(folder, loop.key, "drain balances storage");
+    expect(await engine.getLoopNotes(folder)).toEqual({
+      [loop.key]: "drain balances storage",
+    });
+    const path = await engine.loopNotePath(folder, loop.key);
+    expect(path).toMatch(new RegExp(`^${folder}/Loops/b-(drain-storage|storage-drain)\\.md$`));
+    expect(await loopFiles(storage, folder)).toHaveLength(1);
+  });
+
+  it("keeps two quantitative routes through the same members in independent files", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("Routed quant loops");
+    const stock = await engine.addVariable(folder, { label: "Stock", type: "stock" });
+    const a = await engine.addVariable(folder, { label: "A" });
+    const b = await engine.addVariable(folder, { label: "B" });
+    const flow = await engine.addVariable(folder, { label: "Flow", type: "flow" });
+    await engine.setEquation(folder, stock.id, { initial: "100" });
+    await engine.setEquation(folder, a.id, { equation: "Stock + B" });
+    await engine.setEquation(folder, b.id, { equation: "Stock + A" });
+    await engine.setEquation(folder, flow.id, { equation: "A + B" });
+    await engine.setFlowEndpoints(folder, flow.id, stock.id, SINK_CLOUD);
+    for (const [from, to] of [
+      [stock.id, a.id], [stock.id, b.id], [a.id, b.id],
+      [b.id, a.id], [a.id, flow.id], [b.id, flow.id],
+    ]) {
+      await engine.addLink(folder, from, to, { polarity: "+" });
+    }
+
+    const view = await engine.loadGraph(folder);
+    expect(view.analysisError).toBeNull();
+    const allMembers = new Set([stock.id, a.id, b.id, flow.id]);
+    const routed = view.loops.filter((loop) =>
+      loop.identityMode === "quantitative" &&
+      loop.nodeIds.length === 4 &&
+      loop.nodeIds.every((id) => allMembers.has(id)));
+    expect(routed).toHaveLength(2);
+    expect(new Set(routed.map((loop) => loop.key)).size).toBe(2);
+
+    await engine.setLoopNote(folder, routed[0].key, "route one");
+    await engine.setLoopNote(folder, routed[1].key, "route two");
+    const notes = await engine.getLoopNotes(folder);
+    expect(notes[routed[0].key]).toBe("route one");
+    expect(notes[routed[1].key]).toBe("route two");
+    expect(await loopFiles(storage, folder)).toHaveLength(2);
+    expect(await engine.loopNotePath(folder, routed[0].key)).not.toBe(
+      await engine.loopNotePath(folder, routed[1].key),
+    );
+  });
+
+  it("keeps a quantitative counterpart on one legacy qualitative note identity", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("Counterpart");
+    const stock = await engine.addVariable(folder, { label: "Storage", type: "stock" });
+    const drain = await engine.addVariable(folder, { label: "Drain", type: "flow" });
+    await engine.setEquation(folder, stock.id, { initial: "100" });
+    await engine.setEquation(folder, drain.id, { equation: "Storage / 10" });
+    await engine.setFlowEndpoints(folder, drain.id, stock.id, SINK_CLOUD);
+    await engine.addLink(folder, stock.id, drain.id, { polarity: "+" });
+    await engine.addLink(folder, drain.id, stock.id, { polarity: "-" });
+
+    const view = await engine.loadGraph(folder);
+    expect(view.loops).toHaveLength(1);
+    const loop = view.loops[0];
+    expect(loop.identityMode).toBe("qualitative");
+    expect(loop.canvasPath?.hasMaterialLeg).toBe(true);
+    const byId = new Map(view.nodes.map((entry) => [entry.id, entry.label]));
+    const noteKey = resolvedLoopNoteKey(loop, (id) => byId.get(id) ?? id);
+    expect(noteKey).toBe("B:Drain|Storage");
+    await engine.setLoopNote(folder, noteKey, "one counterpart note");
+    expect(await engine.getLoopNotes(folder)).toEqual({
+      "B:Drain|Storage": "one counterpart note",
+    });
+    expect(await loopFiles(storage, folder)).toHaveLength(1);
+  });
+
+  it("creates no note for an unresolved quantitative cycle", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("Unresolved");
+    const stock = await engine.addVariable(folder, { label: "Storage", type: "stock" });
+    const drain = await engine.addVariable(folder, { label: "Drain", type: "flow" });
+    await engine.setEquation(folder, stock.id, { initial: "100" });
+    await engine.setEquation(folder, drain.id, { equation: "Storage / 10" });
+    await engine.setFlowEndpoints(folder, drain.id, stock.id, SINK_CLOUD);
+
+    const view = await engine.loadGraph(folder);
+    expect(view.loops).toEqual([]);
+    expect(view.analysisError).toMatch(/^quant-loop-analysis-incomplete:/);
+    await engine.setLoopNote(folder, "B:drain>stock", "must not persist");
+    expect(await engine.getLoopNotes(folder)).toEqual({});
+    expect(await loopFiles(storage, folder)).toEqual([]);
+  });
+
   it("anchors a note to a detected loop and resolves it by legacy key", async () => {
     const { storage, engine } = makeEngine();
     const folder = await twoLoopModel(engine);
