@@ -11,8 +11,17 @@
 
 import { Camera, Point } from "./camera";
 import { Theme, groupSwatch, swatchBorder, swatchFill, swatchInk, withAlpha } from "./theme";
-import { DiagramViewMode, EdgeGeom, NodeBox, SfdPipeGeom } from "./geometry";
+import {
+  DiagramViewMode,
+  EdgeGeom,
+  NodeBox,
+  SfdPipeGeom,
+  loopEdgeIds,
+  loopPipeLegIds,
+} from "./geometry";
 import { DetectedLoop, LoopType, VariableFile } from "../engine/types";
+import { isCloud } from "../engine/sfd";
+import { materialPipeLegId } from "../engine/quantCanvasLoops";
 
 export interface Scene {
   mode: DiagramViewMode;
@@ -28,8 +37,37 @@ export interface Scene {
 /** A selected loop's members, so the painter can spotlight just that cycle. */
 export interface LoopHighlight {
   edgeIds: Set<string>;
+  /** First-class SFD material legs, keyed by exact flow + stock identity. */
+  pipeLegIds: Set<string>;
   nodeIds: Set<string>;
   type: LoopType;
+}
+
+/** One coherent selection payload used by plugin and Publish controllers. */
+export function loopHighlightFor(loop: DetectedLoop | null): LoopHighlight | null {
+  return loop
+    ? {
+        edgeIds: loopEdgeIds(loop),
+        pipeLegIds: loopPipeLegIds(loop),
+        nodeIds: new Set(loop.nodeIds),
+        type: loop.type,
+      }
+    : null;
+}
+
+export type MaterialPipeLegVisualState = "normal" | "highlighted" | "dimmed";
+
+/** Exact per-leg SFD state; a transfer pipe's unrelated half can recede. */
+export function materialPipeLegVisualState(
+  flowId: string,
+  stockId: string | null,
+  highlight: LoopHighlight | null,
+): MaterialPipeLegVisualState {
+  if (!highlight) return "normal";
+  if (stockId && highlight.pipeLegIds.has(materialPipeLegId(flowId, stockId))) {
+    return "highlighted";
+  }
+  return "dimmed";
 }
 
 export interface PaintUi {
@@ -88,8 +126,8 @@ export function paint(
   ctx.translate(camera.tx, camera.ty);
   ctx.scale(camera.scale, camera.scale);
 
-  const hl = scene.mode === "cld" ? ui.loopHighlight : null;
-  if (scene.mode === "sfd") paintSfd(ctx, scene, theme, ui);
+  const hl = ui.loopHighlight;
+  if (scene.mode === "sfd") paintSfd(ctx, scene, theme, ui, hl);
   else {
     for (const g of scene.edges) {
       drawEdge(ctx, g, theme, g.id === ui.selectedEdgeId, hl, ui.flowPhase);
@@ -135,11 +173,12 @@ function paintSfd(
   scene: Scene,
   theme: Theme,
   ui: PaintUi,
+  hl: LoopHighlight | null,
 ): void {
   const pipeByFlow = new Map(scene.pipes.map((p) => [p.flowId, p]));
-  for (const p of scene.pipes) drawSfdPipe(ctx, p, scene, theme);
+  for (const p of scene.pipes) drawSfdPipe(ctx, p, scene, theme, hl, ui.flowPhase);
   for (const g of scene.edges) {
-    drawEdge(ctx, g, theme, g.id === ui.selectedEdgeId, null, ui.flowPhase);
+    drawEdge(ctx, g, theme, g.id === ui.selectedEdgeId, hl, ui.flowPhase);
   }
   for (const n of scene.nodes) {
     if (n.type === "flow") continue;
@@ -152,7 +191,7 @@ function paintSfd(
       theme,
       n.id === ui.selectedNodeId,
       ui.liveNodeIds.has(n.id),
-      false,
+      hl ? !hl.nodeIds.has(n.id) : false,
       n.id === ui.selectedNodeId ? ui.pulsePhase : 0,
     );
   }
@@ -169,6 +208,7 @@ function paintSfd(
       n.id === ui.selectedNodeId,
       ui.liveNodeIds.has(n.id),
       n.id === ui.selectedNodeId ? ui.pulsePhase : 0,
+      hl ? !hl.nodeIds.has(n.id) : false,
     );
   }
 }
@@ -394,9 +434,15 @@ function drawSfdPipe(
   pipe: SfdPipeGeom,
   scene: Scene,
   theme: Theme,
+  highlight: LoopHighlight | null,
+  flowPhase: number,
 ): void {
   const flow = scene.nodes.find((n) => n.id === pipe.flowId);
-  drawDoubleLine(ctx, pipe.fromPoint, pipe.valvePoint, theme);
+  const fromStock = isCloud(pipe.from) ? null : pipe.from;
+  const toStock = isCloud(pipe.to) ? null : pipe.to;
+  const fromState = materialPipeLegVisualState(pipe.flowId, fromStock, highlight);
+  const toState = materialPipeLegVisualState(pipe.flowId, toStock, highlight);
+  drawDoubleLine(ctx, pipe.fromPoint, pipe.valvePoint, theme, fromState, highlight, flowPhase);
   const axis = {
     x: pipe.toPoint.x - pipe.valvePoint.x,
     y: pipe.toPoint.y - pipe.valvePoint.y,
@@ -407,13 +453,23 @@ function drawSfdPipe(
     x: pipe.toPoint.x - (axis.x / len) * arrowLen,
     y: pipe.toPoint.y - (axis.y / len) * arrowLen,
   };
-  drawDoubleLine(ctx, pipe.valvePoint, toBase, theme);
-  drawPipeArrow(ctx, pipe.valvePoint, pipe.toPoint, theme);
+  drawDoubleLine(ctx, pipe.valvePoint, toBase, theme, toState, highlight, flowPhase);
+  drawPipeArrow(ctx, pipe.valvePoint, pipe.toPoint, theme, toState, highlight);
 
   const sw = groupSwatch(flow?.group);
   const tint = sw ? swatchFill(sw, theme.dark) : undefined;
-  if (pipe.fromCloud) drawCloud(ctx, pipe.fromCloud, theme, tint);
-  if (pipe.toCloud) drawCloud(ctx, pipe.toCloud, theme, tint);
+  if (pipe.fromCloud) {
+    ctx.save();
+    if (fromState === "dimmed") ctx.globalAlpha = 0.16;
+    drawCloud(ctx, pipe.fromCloud, theme, tint);
+    ctx.restore();
+  }
+  if (pipe.toCloud) {
+    ctx.save();
+    if (toState === "dimmed") ctx.globalAlpha = 0.16;
+    drawCloud(ctx, pipe.toCloud, theme, tint);
+    ctx.restore();
+  }
 }
 
 function drawDoubleLine(
@@ -421,22 +477,47 @@ function drawDoubleLine(
   p0: Point,
   p1: Point,
   theme: Theme,
+  state: MaterialPipeLegVisualState,
+  highlight: LoopHighlight | null,
+  flowPhase: number,
 ): void {
+  const loopColor = state === "highlighted"
+    ? (highlight?.type === LoopType.reinforcing ? theme.teal : theme.amber)
+    : null;
+  ctx.save();
+  if (state === "dimmed") ctx.globalAlpha = 0.16;
   const dx = p1.x - p0.x;
   const dy = p1.y - p0.y;
   const len = Math.hypot(dx, dy) || 1;
   const off = 3;
   const nx = (-dy / len) * off;
   const ny = (dx / len) * off;
-  ctx.strokeStyle = theme.graphite;
-  ctx.lineWidth = 1.5;
+  if (loopColor) {
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.strokeStyle = withAlpha(loopColor, 0.22);
+    ctx.lineWidth = 10;
+    ctx.stroke();
+  }
+  ctx.strokeStyle = loopColor ?? theme.graphite;
+  ctx.lineWidth = loopColor ? 2.4 : 1.5;
   ctx.lineCap = "round";
+  if (loopColor) {
+    ctx.setLineDash([7, 6]);
+    ctx.lineDashOffset = -(flowPhase * 13);
+  }
   for (const sign of [-1, 1]) {
     ctx.beginPath();
     ctx.moveTo(p0.x + nx * sign, p0.y + ny * sign);
     ctx.lineTo(p1.x + nx * sign, p1.y + ny * sign);
     ctx.stroke();
   }
+  if (loopColor) {
+    ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
+  }
+  ctx.restore();
 }
 
 function drawPipeArrow(
@@ -444,7 +525,11 @@ function drawPipeArrow(
   from: Point,
   tip: Point,
   theme: Theme,
+  state: MaterialPipeLegVisualState,
+  highlight: LoopHighlight | null,
 ): void {
+  ctx.save();
+  if (state === "dimmed") ctx.globalAlpha = 0.16;
   const dx = tip.x - from.x;
   const dy = tip.y - from.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -458,8 +543,11 @@ function drawPipeArrow(
   ctx.lineTo(base.x + px * 6, base.y + py * 6);
   ctx.lineTo(base.x - px * 6, base.y - py * 6);
   ctx.closePath();
-  ctx.fillStyle = theme.graphite;
+  ctx.fillStyle = state === "highlighted"
+    ? (highlight?.type === LoopType.reinforcing ? theme.teal : theme.amber)
+    : theme.graphite;
   ctx.fill();
+  ctx.restore();
 }
 
 function drawCloud(
@@ -497,7 +585,10 @@ function drawSfdValve(
   selected: boolean,
   live: boolean,
   pulse: number,
+  dim: boolean,
 ): void {
+  ctx.save();
+  if (dim) ctx.globalAlpha = 0.16;
   const c = { x: box.cx, y: box.cy };
   if (selected) {
     const grow = 10 + 20 * pulse;
@@ -550,6 +641,7 @@ function drawSfdValve(
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillText(fitText(ctx, node.label, Math.max(72, box.w)), c.x, c.y + 16);
+  ctx.restore();
 }
 
 function drawEdge(
@@ -649,7 +741,7 @@ function drawArrow(
 function drawPolarityChip(
   ctx: CanvasRenderingContext2D,
   c: Point,
-  polarity: "+" | "-",
+  polarity: "+" | "-" | "?",
   theme: Theme,
   selected: boolean,
 ): void {
@@ -671,7 +763,7 @@ function drawPolarityChip(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   // En-dash (U+2013) for the negative glyph, matching the app.
-  ctx.fillText(polarity === "-" ? "–" : "+", c.x, c.y + 0.5);
+  ctx.fillText(polarity === "-" ? "–" : polarity, c.x, c.y + 0.5);
 }
 
 function drawDelay(

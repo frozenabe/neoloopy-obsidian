@@ -73,6 +73,9 @@ thinking already lives.
   **nonlinear**. One command auto-tidies the layout.
 - 🔁 **Automatic loop detection.** Reinforcing (R) and balancing (B) feedback
   loops are found for you and labelled R1/B1… directly on the diagram.
+  Executable quantitative loops also appear when their complete path resolves:
+  CLD mode projects each material effect as a causal link, while SFD mode
+  highlights the corresponding stock-flow pipe.
 - ⚡ **Live edits.** Change a note in another pane — or let an AI agent edit the
   vault — and the canvas updates instantly, flashing exactly what changed.
 - 🧭 **System insight & navigation.** A side panel surfaces detected loops and
@@ -177,9 +180,12 @@ Quantitative System Dynamics *simulation* is not part of this plugin (it lives i
 the neoloopy app/CLI). Quantitative models are still viewable and lightly
 **editable** here without a simulator: in the **ƒx** modal you can edit a node's
 equation (or a stock's initial value) and its units, written straight back to the
-vault note. The insight panel surfaces the qualitative structure — feedback
-loops, parents, exogenous drivers, and reference-mode sparklines — with no
-simulator and no network.
+vault note. The plugin statically resolves complete executable feedback paths
+from equations and first-class stock-flow endpoints. It renders material effects
+as causal projections in CLD mode and as pipes in SFD mode; unsupported,
+ambiguous, or incomplete topology produces no partial quantitative badge. The
+insight panel also surfaces parents, exogenous drivers, and reference-mode
+sparklines with no simulator and no network.
 
 ## Support
 

@@ -19,3 +19,4 @@ export * from "./engine/loopNote";
 export * from "./engine/noteNaming";
 export * from "./engine/specHash";
 export * from "./engine/sfd";
+export * from "./engine/quantCanvasLoops";

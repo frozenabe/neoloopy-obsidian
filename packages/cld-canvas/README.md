@@ -472,13 +472,21 @@ import { buildMermaid, render } from "@neoloopy/cld-canvas";
 <sub>The same loop detection these helpers expose, surfaced in a neoloopy surface — a project-dynamics model with its reinforcing and balancing loops and the insight panel.</sub>
 
 ```ts
-import { LoopGraph, endogeneity } from "@neoloopy/cld-canvas";
+import { LoopGraph, discoverCanvasLoops, endogeneity } from "@neoloopy/cld-canvas";
 
 const loopGraph = new LoopGraph(graph.nodes);
-const loops = loopGraph.detectLoops();
+const qualitative = loopGraph.detectLoops();
+const { loops, analysisError } = discoverCanvasLoops(graph.nodes, qualitative, {
+  manifest: graph.manifest,
+});
 const metrics = loopGraph.metrics();
 const summary = endogeneity(graph.nodes, loops);
 ```
+
+`discoverCanvasLoops` adds a quantitative loop only when its complete executable
+route resolves to visible causal connectors and first-class material pipe legs.
+It preserves qualitative loop identity, deduplicates exact counterparts, and
+fails closed with `analysisError` instead of emitting a partial badge.
 
 ## What is exported
 
@@ -486,7 +494,8 @@ The package exports the public modules from `src/index.ts`, including:
 
 - Engine: `NativeEngine`, `NeoloopyEngine`, `MemoryStorage`, `VaultStorage`
 - Domain types: `VariableFile`, `VaultLink`, `ModelManifest`, `GraphView`
-- Graph logic: `LoopGraph`, `DetectedLoop`, `LoopType`, `labelLoopsByKey`
+- Graph logic: `LoopGraph`, `DetectedLoop`, `LoopType`, `labelLoopsByKey`,
+  `discoverCanvasLoops`
 - Rendering: `paint`, `SceneCache`, `Camera`, `LIGHT`, `DARK`, geometry helpers
 - File codecs: `parseNote`, `serializeNote`, `manifestFromJson`
 - Exporters: `render`, `buildMermaid`, `loopNoteKey`

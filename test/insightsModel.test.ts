@@ -3,6 +3,8 @@ import { GraphView, VariableFile, emptyVariable } from "@neoloopy/cld-canvas";
 import {
   INSIGHT_DESTINATIONS,
   modelHealthChecks,
+  loopAnalysisWarning,
+  loopReportMessage,
   resolveInsightDestination,
 } from "../src/engine/insightsModel";
 
@@ -21,6 +23,32 @@ describe("Insights destinations", () => {
 
   it("falls back to the first visible destination when active is unavailable", () => {
     expect(resolveInsightDestination("loops", ["structure", "health"])).toBe("structure");
+  });
+
+  it("never presents incomplete quantitative analysis as zero loops", () => {
+    const incomplete = {
+      ...graph([]),
+      analysisError: "quant-loop-analysis-incomplete: unsupported topology",
+    };
+    expect(loopAnalysisWarning(incomplete)).toContain("incomplete");
+    expect(loopAnalysisWarning(incomplete)).toContain("No partial quantitative badges");
+    expect(loopAnalysisWarning(graph([]))).toBeNull();
+  });
+
+  it("qualifies a non-empty qualitative report when quantitative analysis is incomplete", () => {
+    const loop = {
+      nodeIds: ["a", "b"],
+      type: 0,
+      key: "0:a|b",
+    };
+    const incomplete = {
+      ...graph([]),
+      loops: [loop],
+      labels: new Map([[loop.key, "R1"]]),
+      analysisError: "quant-loop-analysis-incomplete: unsupported topology",
+    } as unknown as GraphView;
+    expect(loopReportMessage(incomplete)).toContain("1 loop: R1");
+    expect(loopReportMessage(incomplete)).toContain("analysis is incomplete");
   });
 });
 

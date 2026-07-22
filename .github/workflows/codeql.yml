@@ -1,9 +1,9 @@
 # CodeQL static analysis for the plugin's TypeScript/JavaScript source.
 #
-# Runs GitHub's code-scanning engine on every push and pull request to main,
-# plus a weekly scheduled scan so newly published CodeQL queries reach the
-# existing code without waiting for a commit. Results appear under the repo's
-# Security > Code scanning tab.
+# Repository workflows are disabled at rest and ordinary pull requests use the
+# local delivery gate. Enable this workflow only for an explicitly authorized
+# deployment-time scan, then disable it immediately afterward. Results appear
+# under the repo's Security > Code scanning tab.
 #
 # This is an Obsidian plugin (pure TS/JS, bundled by esbuild), so CodeQL needs
 # no build — build-mode "none" extracts the source directly.

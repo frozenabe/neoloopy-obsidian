@@ -14,6 +14,7 @@
 import { setIcon } from "obsidian";
 import {
   Camera,
+  DetectedLoop,
   DiagramViewMode,
   EdgeGeom,
   GROUP_PALETTE,
@@ -25,7 +26,6 @@ import {
   VarType,
   flowOf,
 } from "@neoloopy/cld-canvas";
-import { LoopLike } from "./loopKeys";
 
 /** What the chrome needs from the canvas: reads + the edit commands it fires. */
 export interface ChromeHost {
@@ -38,7 +38,7 @@ export interface ChromeHost {
   isIdle(): boolean;
   selectedEdgeGeom(): EdgeGeom | null;
   /** Whether the loop already has a non-empty note (drives the badge icon). */
-  loopHasNote(loop: LoopLike): boolean;
+  loopHasNote(loop: DetectedLoop): boolean;
   listen(el: HTMLElement, type: string, cb: (e: Event) => void): void;
 
   setNodeType(id: string, type: VarType): void;
@@ -276,7 +276,7 @@ export class SelectionChrome {
       this.edgeMenuToggle.toggleClass("is-visible", true);
       if (this.edgeMenuOpen) {
         this.place(this.edgeMenu, s.x, s.y + 50);
-        this.edgePolBtns["+"]?.toggleClass("is-active", g.link.polarity !== "-");
+        this.edgePolBtns["+"]?.toggleClass("is-active", g.link.polarity === "+");
         this.edgePolBtns["-"]?.toggleClass("is-active", g.link.polarity === "-");
         this.edgeFlagBtns.delay?.toggleClass("is-active", g.link.delay);
         this.edgeFlagBtns.indirect?.toggleClass("is-active", g.link.indirect);

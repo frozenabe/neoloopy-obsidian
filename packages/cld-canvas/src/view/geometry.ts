@@ -8,6 +8,7 @@
  */
 
 import { DetectedLoop, VariableFile, VaultLink } from "../engine/types";
+import { materialPipeLegId } from "../engine/quantCanvasLoops";
 import {
   isCloud,
   isMaterialLink,
@@ -17,6 +18,16 @@ import {
 import { Bounds, Point } from "./camera";
 
 export type DiagramViewMode = "cld" | "sfd";
+
+/** Loops whose complete representation exists in the requested canvas view. */
+export function loopsForMode(
+  loops: DetectedLoop[],
+  mode: DiagramViewMode,
+): DetectedLoop[] {
+  return mode === "sfd"
+    ? loops.filter((loop) => loop.canvasPath?.hasMaterialLeg === true)
+    : loops;
+}
 
 export interface NodeBox {
   id: string;
@@ -32,6 +43,9 @@ export interface EdgeRef {
   source: string;
   target: string;
   link: VaultLink;
+  /** View-only topology (for example a CLD material projection).
+   *  Rendered normally, but never participates in edge hit/edit routing. */
+  renderOnly?: boolean;
 }
 
 export interface EdgeGeom extends EdgeRef {
@@ -105,6 +119,44 @@ export function collectInfoEdges(nodes: VariableFile[], mode: DiagramViewMode): 
     for (const l of n.links) {
       if (isMaterialLink(n, l, byId)) continue;
       out.push({ id: `${n.id}__${l.to}`, source: n.id, target: l.to, link: l });
+    }
+  }
+  return out;
+}
+
+/**
+ * Minimum non-persistent causal projections needed to close fully resolved
+ * quantitative loops in CLD notation. A matching declared connector is already
+ * present in `collectEdges`; only legs whose resolver assigned a synthetic
+ * `cldEdgeId` are emitted here. These refs are `renderOnly`, so they cannot be
+ * selected, bowed, deleted, or serialized as authored causal links.
+ */
+export function collectCldMaterialProjectionEdges(
+  nodes: VariableFile[],
+  loops: DetectedLoop[],
+): EdgeRef[] {
+  const persistedIds = new Set(collectEdges(nodes).map((edge) => edge.id));
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const emitted = new Set<string>();
+  const out: EdgeRef[] = [];
+  for (const loop of loops) {
+    for (const leg of loop.canvasPath?.legs ?? []) {
+      if (leg.kind !== "material") continue;
+      if (persistedIds.has(leg.cldEdgeId) || !emitted.add(leg.cldEdgeId)) continue;
+      if (!byId.has(leg.flowId) || !byId.has(leg.stockId)) continue;
+      out.push({
+        id: leg.cldEdgeId,
+        source: leg.flowId,
+        target: leg.stockId,
+        link: {
+          to: leg.stockId,
+          polarity: leg.polarity < 0 ? "-" : "+",
+          delay: false,
+          indirect: false,
+          nonlinear: false,
+        },
+        renderOnly: true,
+      });
     }
   }
   return out;
@@ -453,12 +505,27 @@ export function computeBadges(
  * to the first. Used to highlight the loop when its badge is selected.
  */
 export function loopEdgeIds(loop: DetectedLoop): Set<string> {
+  if (loop.canvasPath) {
+    return new Set(loop.canvasPath.legs.map((leg) =>
+      leg.kind === "causal" ? leg.edgeId : leg.cldEdgeId,
+    ));
+  }
   const ids = loop.nodeIds;
   const out = new Set<string>();
   for (let i = 0; i < ids.length; i++) {
     out.add(`${ids[i]}__${ids[(i + 1) % ids.length]}`);
   }
   return out;
+}
+
+/** Exact material pipe legs (`flowId` + `stockId`) belonging to a resolved loop. */
+export function loopPipeLegIds(loop: DetectedLoop): Set<string> {
+  if (!loop.canvasPath) return new Set();
+  return new Set(
+    loop.canvasPath.legs
+      .filter((leg) => leg.kind === "material")
+      .map((leg) => materialPipeLegId(leg.flowId, leg.stockId)),
+  );
 }
 
 // ---- hit testing -----------------------------------------------------------
@@ -480,6 +547,7 @@ export function hitEdge(
   let best: string | null = null;
   let bestD = tol;
   for (const g of geoms) {
+    if (g.renderOnly) continue;
     for (let i = 0; i + 1 < g.points.length; i++) {
       const d = distToSegment(p, g.points[i], g.points[i + 1]);
       if (d < bestD) {
@@ -499,6 +567,7 @@ export function hitEdge(
  * pixel-perfect second press on the line.
  */
 export function nearSelectedEdge(g: EdgeGeom, p: Point, scale: number): boolean {
+  if (g.renderOnly) return false;
   if (Math.hypot(g.mid.x - p.x, g.mid.y - p.y) < 26 / scale) return true;
   let best = Infinity;
   for (let i = 0; i + 1 < g.points.length; i++) {

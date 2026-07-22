@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  DetectedLoop,
   LoopGraph,
   LoopType,
   VariableFile,
@@ -27,6 +28,8 @@ describe("loop detection — classification", () => {
     const loops = g.detectLoops();
     expect(loops).toHaveLength(1);
     expect(loops[0].type).toBe(LoopType.reinforcing);
+    expect(loops[0].key).toBe("0:a|b");
+    expect(loops[0].exactKey).toBe("R:a>b");
   });
 
   it("one opposite-sign link forms a balancing loop", () => {
@@ -78,6 +81,48 @@ describe("loop labelling", () => {
     const byType = new Map(loops.map((l) => [l.type, labels.get(l.key)]));
     expect(byType.get(LoopType.reinforcing)).toBe("R1");
     expect(byType.get(LoopType.balancing)).toBe("B1");
+  });
+
+  it("keeps the established qualitative name ordering", () => {
+    const first = new LoopGraph([
+      { ...v("z", [["a", "+"]]), label: "Zulu" },
+      { ...v("a", [["z", "+"]]), label: "Alpha" },
+      { ...v("m", [["n", "+"]]), label: "Mike" },
+      { ...v("n", [["m", "+"]]), label: "November" },
+    ]);
+    const loops = first.detectLoops();
+    const labels = labelLoopsByKey(loops, (id) => first.node(id)?.label ?? id);
+    const alpha = loops.find((loop) => loop.nodeIds.includes("a"))!;
+    const mike = loops.find((loop) => loop.nodeIds.includes("m"))!;
+    expect(labels.get(alpha.key)).toBe("R1");
+    expect(labels.get(mike.key)).toBe("R2");
+  });
+
+  it("appends quantitative-only labels without renumbering qualitative badges", () => {
+    const qualitative = new DetectedLoop(["z", "y"], LoopType.balancing);
+    const quantitative = new DetectedLoop(
+      ["a", "b"],
+      LoopType.balancing,
+      undefined,
+      "quantitative",
+    );
+    const names = new Map([
+      ["z", "Zulu"], ["y", "Yankee"], ["a", "Alpha"], ["b", "Beta"],
+    ]);
+    const labels = labelLoopsByKey(
+      [quantitative, qualitative],
+      (id) => names.get(id) ?? id,
+    );
+    expect(labels.get(qualitative.key)).toBe("B1");
+    expect(labels.get(quantitative.key)).toBe("B2");
+  });
+
+  it("preserves qualitative input order when sorted names tie", () => {
+    const first = new DetectedLoop(["z", "y"], LoopType.reinforcing);
+    const second = new DetectedLoop(["a", "b"], LoopType.reinforcing);
+    const labels = labelLoopsByKey([first, second], () => "Duplicate");
+    expect(labels.get(first.key)).toBe("R1");
+    expect(labels.get(second.key)).toBe("R2");
   });
 });
 

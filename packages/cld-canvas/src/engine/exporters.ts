@@ -18,7 +18,7 @@ export interface ExportEdge {
   id?: string;
   source: string;
   target: string;
-  polarity?: number;
+  polarity?: number | "?";
   delay?: boolean;
   curvature?: number;
   dashed?: boolean;
@@ -67,7 +67,7 @@ export function buildMermaid(nodes: ExportNode[], edges: ExportEdge[]): string {
     const s = key.get(String(e.source));
     const t = key.get(String(e.target));
     if (!s || !t) continue;
-    const sym = (e.polarity ?? 1) >= 0 ? "+" : "−";
+    const sym = e.polarity === "?" ? "?" : (e.polarity ?? 1) >= 0 ? "+" : "−";
     const arrow = e.delay === true ? "-.->" : "-->";
     lines.push(`  ${s} ${arrow}|${sym}| ${t}`);
   }

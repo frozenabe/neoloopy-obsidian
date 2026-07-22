@@ -14,6 +14,23 @@ export const INSIGHT_DESTINATIONS: InsightDestination[] = [
   "health",
 ];
 
+/** Honest user-facing state when bounded quantitative loop analysis fails. */
+export function loopAnalysisWarning(g: GraphView): string | null {
+  return g.analysisError
+    ? "Quantitative loop analysis is incomplete. No partial quantitative badges were added."
+    : null;
+}
+
+/** Complete command-palette loop report, including any analysis qualifier. */
+export function loopReportMessage(g: GraphView): string {
+  const warning = loopAnalysisWarning(g);
+  if (g.loops.length === 0) return warning ?? "No feedback loops detected.";
+  const labels = g.loops.map((loop) => g.labels.get(loop.key) ?? "?").sort();
+  const summary = `${g.loops.length} loop${g.loops.length === 1 ? "" : "s"}: ` +
+    labels.join(", ");
+  return warning ? `${summary}. ${warning}` : summary;
+}
+
 export function resolveInsightDestination(
   active: InsightDestination,
   available: readonly InsightDestination[] = INSIGHT_DESTINATIONS,
