@@ -66,6 +66,20 @@ describe("edge geometry", () => {
     expect(Math.sign(ab.mid.y) * Math.sign(ba.mid.y)).toBeLessThan(0);
   });
 
+  it("keeps an automatic reciprocal edge opposite an authored reverse curvature", () => {
+    const automatic = link("b");
+    const authored: VaultLink = { ...link("a"), curvature: -66 };
+    const nodes = [node("a", 0, 0, [automatic]), node("b", 300, 0, [authored])];
+    const geoms = buildEdgeGeoms(collectEdges(nodes), buildNodeBoxes(nodes));
+    const ab = geoms.find((edge) => edge.source === "a")!;
+    const ba = geoms.find((edge) => edge.source === "b")!;
+
+    // Futures Demo stores a hand-bowed Population -> Births connector and an
+    // automatic legacy Births -> Population material link. They must not paint
+    // on the same geometric side and masquerade as one broken CLD edge.
+    expect(Math.sign(ab.mid.y) * Math.sign(ba.mid.y)).toBeLessThan(0);
+  });
+
   it("skips edges whose endpoints are missing", () => {
     const nodes = [node("a", 0, 0, [link("ghost")])];
     const boxes = buildNodeBoxes(nodes);

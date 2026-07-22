@@ -473,6 +473,48 @@ describe("NativeEngine — loop notes as Loops/*.md files", () => {
     expect(await loopFiles(storage, folder)).toHaveLength(1);
   });
 
+  it("CRITICAL loads a link-only Futures inflow as one enriched R1 note identity", async () => {
+    const { storage, engine } = makeEngine();
+    const { folder } = await engine.createModel("Futures legacy inflow");
+    const population = await engine.addVariable(folder, { label: "Population", type: "stock" });
+    const births = await engine.addVariable(folder, { label: "Births", type: "flow" });
+    const birthRate = await engine.addVariable(folder, { label: "BirthRate" });
+    await engine.setEquation(folder, population.id, { initial: "100" });
+    await engine.setEquation(folder, births.id, { equation: "Population * BirthRate" });
+    await engine.setEquation(folder, birthRate.id, { equation: "0.03" });
+    await engine.addLink(folder, birthRate.id, births.id, { polarity: "+" });
+    await engine.addLink(folder, population.id, births.id, { polarity: "+", curvature: -66 });
+    // No setFlowEndpoints call: this is the supported legacy material encoding.
+    await engine.addLink(folder, births.id, population.id, { polarity: "+" });
+
+    const view = await engine.loadGraph(folder);
+    expect(view.analysisError).toBeNull();
+    expect(view.loops).toHaveLength(1);
+    const loop = view.loops[0];
+    expect(loop.identityMode).toBe("qualitative");
+    expect(view.labels.get(loop.key)).toBe("R1");
+    expect(loop.canvasPath?.legs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "causal",
+        edgeId: `${population.id}__${births.id}`,
+      }),
+      expect.objectContaining({
+        kind: "material",
+        flowId: births.id,
+        stockId: population.id,
+        cldEdgeId: `${births.id}__${population.id}`,
+      }),
+    ]));
+    const names = new Map(view.nodes.map((entry) => [entry.id, entry.label]));
+    const noteKey = resolvedLoopNoteKey(loop, (id) => names.get(id) ?? id);
+    expect(noteKey).toBe("R:Births|Population");
+    await engine.setLoopNote(folder, noteKey, "growth reinforces population");
+    expect(await engine.getLoopNotes(folder)).toEqual({
+      "R:Births|Population": "growth reinforces population",
+    });
+    expect(await loopFiles(storage, folder)).toHaveLength(1);
+  });
+
   it("creates no note for an unresolved quantitative cycle", async () => {
     const { storage, engine } = makeEngine();
     const { folder } = await engine.createModel("Unresolved");

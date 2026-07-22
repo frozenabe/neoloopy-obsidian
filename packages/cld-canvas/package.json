@@ -1,6 +1,6 @@
 {
   "name": "@neoloopy/cld-canvas",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "author": "neoloopy",
   "license": "MIT",
   "description": "Framework-agnostic CLD canvas renderer + in-memory edit engine (shared by the neoloopy Obsidian plugin and neoloopy.com).",
@@ -40,5 +40,5 @@
   },
   "homepage": "https://github.com/frozenabe/neoloopy-obsidian/tree/main/packages/cld-canvas#readme",
   "bugs": { "url": "https://github.com/frozenabe/neoloopy-obsidian/issues" },
-  "scripts": { "build": "tsc -p tsconfig.json" }
+  "scripts": { "build": "tsc -p tsconfig.json", "prepack": "npm run build" }
 }

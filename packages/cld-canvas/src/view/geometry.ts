@@ -225,8 +225,26 @@ export function buildEdgeGeoms(
     (e) => boxes.has(e.source) && boxes.has(e.target),
   );
   const dirSet = new Set(present.map((e) => `${e.source}>${e.target}`));
+  const explicitBowSigns = new Map<string, number>();
+  for (const edge of present) {
+    const curvature = edge.link.curvature;
+    if (curvature === undefined || !Number.isFinite(curvature) || curvature === 0) continue;
+    const key = `${edge.source}>${edge.target}`;
+    const sign = Math.sign(curvature);
+    const previous = explicitBowSigns.get(key);
+    // Duplicate authored connectors with conflicting bows do not select the
+    // automatic reciprocal's side. The normal default remains deterministic.
+    explicitBowSigns.set(key, previous === undefined || previous === sign ? sign : 0);
+  }
   const centroid = centroidOf(boxes);
-  return present.map((e) => geomFor(e, boxes, dirSet, centroid, bowCache));
+  return present.map((e) => geomFor(
+    e,
+    boxes,
+    dirSet,
+    centroid,
+    bowCache,
+    explicitBowSigns.get(`${e.target}>${e.source}`),
+  ));
 }
 
 function centroidOf(boxes: Map<string, NodeBox>): Point {
@@ -247,6 +265,7 @@ function geomFor(
   dirSet: Set<string>,
   centroid: Point,
   bowCache?: Map<string, number>,
+  reverseExplicitBowSign?: number,
 ): EdgeGeom {
   const a = boxes.get(e.source) as NodeBox;
   const b = boxes.get(e.target) as NodeBox;
@@ -269,9 +288,10 @@ function geomFor(
     // midpoint along the perpendicular (set by dragging the edge).
     bow = e.link.curvature;
   } else if (dirSet.has(`${e.target}>${e.source}`)) {
-    // Reciprocal pair — both use the same bow sign; their opposite chord
-    // directions make the two arcs split to opposite geometric sides.
-    bow = mag;
+    // Reciprocal pair: matching signed bows split across the opposite chord
+    // normals. When the reverse connector was hand-bowed, mirror its sign so
+    // this automatic connector cannot collapse onto the authored curve.
+    bow = mag * (reverseExplicitBowSign === -1 ? -1 : 1);
   } else {
     // Lone edge — bow away from the graph centroid so loops read as circles,
     // but FREEZE the chosen side per edge: a later node drag shifts the centroid

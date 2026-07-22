@@ -251,6 +251,62 @@ describe("quantitative canvas-loop discovery", () => {
     });
   });
 
+  it("fails closed on ambiguous legacy material topology", () => {
+    const nodes = stockDrain();
+    delete nodes[1].extra.flow;
+    nodes[1].links = [
+      { to: "stock", polarity: "-", delay: false, indirect: false, nonlinear: false },
+      { to: "other-stock", polarity: "-", delay: false, indirect: false, nonlinear: false },
+    ];
+    nodes.push(node("other-stock", "Other Storage", "stock", { initial: "50" }));
+
+    const qualitative = new LoopGraph(nodes).detectLoops();
+    expect(qualitative).toHaveLength(1);
+    const result = discoverCanvasLoops(nodes, qualitative);
+    expect(result.analysisError).toMatch(/^quant-loop-analysis-incomplete:/);
+    expect(result.loops).toHaveLength(1);
+    expect(result.loops[0].key).toBe(qualitative[0].key);
+    expect(result.loops[0].canvasPath).toBeUndefined();
+  });
+
+  it("fails closed when malformed explicit endpoints coexist with a legacy material link", () => {
+    const nodes = stockDrain();
+    nodes[1].extra.flow = { from: "stock" };
+    nodes[1].links = [{
+      to: "stock",
+      polarity: "-",
+      delay: false,
+      indirect: false,
+      nonlinear: false,
+    }];
+
+    const result = discoverCanvasLoops(nodes, new LoopGraph(nodes).detectLoops());
+    expect(result.analysisError).toContain("malformed explicit material endpoints");
+    expect(result.loops).toHaveLength(1);
+    expect(result.loops[0].canvasPath).toBeUndefined();
+  });
+
+  it.each([
+    ["unknown", { to: "other-stock", polarity: "?" as const, delay: false, indirect: false, nonlinear: false }],
+    ["dashed", { to: "other-stock", polarity: "-" as const, delay: false, indirect: true, nonlinear: false }],
+  ])("fails closed when a resolvable legacy material leg has an extra %s stock candidate", (_name, extraLink) => {
+    const nodes = stockDrain();
+    delete nodes[1].extra.flow;
+    nodes[1].links = [
+      { to: "stock", polarity: "-", delay: false, indirect: false, nonlinear: false },
+      extraLink,
+    ];
+    nodes.push(node("other-stock", "Other Storage", "stock", { initial: "50" }));
+
+    const qualitative = new LoopGraph(nodes).detectLoops();
+    expect(qualitative).toHaveLength(1);
+    const result = discoverCanvasLoops(nodes, qualitative);
+    expect(result.analysisError).toMatch(/^quant-loop-analysis-incomplete:/);
+    expect(result.loops).toHaveLength(1);
+    expect(result.loops[0].key).toBe(qualitative[0].key);
+    expect(result.loops[0].canvasPath).toBeUndefined();
+  });
+
   it("fails a candidate closed when an executable connector is unresolved", () => {
     const nodes = stockDrain();
     nodes[0].links = [];

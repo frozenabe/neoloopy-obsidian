@@ -48,6 +48,87 @@ describe("SFD topology helpers", () => {
     expect(resolveFlowSpec(deaths, byId)).toEqual({ from: "pop", to: SINK_CLOUD });
   });
 
+  it("does not fall back to legacy links when an explicit flow block is malformed", () => {
+    const pop = node("pop", "Population", "stock");
+    const births = {
+      ...node("births", "Births", "flow", { flow: { from: SOURCE_CLOUD } }),
+      links: [link("pop", "+")],
+    };
+    const byId = new Map([pop, births].map((entry) => [entry.id, entry]));
+
+    expect(resolveFlowSpec(births, byId)).toBeNull();
+    expect(isMaterialLink(births, births.links[0], byId)).toBe(false);
+    expect(buildSfdPipeGeoms([pop, births], buildNodeBoxes([pop, births]))).toEqual([]);
+  });
+
+  it.each([
+    ["indirect", { ...link("pop", "+"), indirect: true }],
+    ["unknown-sign", { ...link("pop", "+"), polarity: "?" as const }],
+  ])("does not fabricate a legacy pipe from an %s stock connector", (_name, stockLink) => {
+    const pop = node("pop", "Population", "stock");
+    const births = { ...node("births", "Births", "flow"), links: [stockLink] };
+    const byId = new Map([pop, births].map((entry) => [entry.id, entry]));
+
+    expect(resolveFlowSpec(births, byId)).toBeNull();
+    expect(isMaterialLink(births, stockLink, byId)).toBe(false);
+  });
+
+  it("keeps ambiguous legacy stock links visible instead of hiding them behind no pipe", () => {
+    const first = node("first", "First", "stock");
+    const second = node("second", "Second", "stock");
+    const flow = {
+      ...node("flow", "Flow", "flow"),
+      links: [link("first", "+"), link("second", "+")],
+    };
+    const byId = new Map([first, second, flow].map((entry) => [entry.id, entry]));
+
+    expect(resolveFlowSpec(flow, byId)).toBeNull();
+    expect(flow.links.map((entry) => isMaterialLink(flow, entry, byId))).toEqual([false, false]);
+  });
+
+  it.each([
+    ["unknown-sign", { ...link("second", "+"), polarity: "?" as const }],
+    ["indirect", { ...link("second", "+"), indirect: true }],
+  ])("rejects all legacy material inference when an extra stock candidate is %s", (_name, badLink) => {
+    const first = node("first", "First", "stock");
+    const second = node("second", "Second", "stock");
+    const flow = {
+      ...node("flow", "Flow", "flow"),
+      links: [link("first", "+"), badLink],
+    };
+    const nodes = [first, second, flow];
+    const byId = new Map(nodes.map((entry) => [entry.id, entry]));
+
+    expect(resolveFlowSpec(flow, byId)).toBeNull();
+    expect(buildSfdPipeGeoms(nodes, buildNodeBoxes(nodes))).toEqual([]);
+    expect(flow.links.map((entry) => isMaterialLink(flow, entry, byId))).toEqual([false, false]);
+    const scene = new SceneCache().build({
+      nodes,
+      loops: [],
+      labels: new Map(),
+    } as unknown as GraphView, new Map(), new Map(), "sfd")!;
+    expect(scene.edges.map((edge) => edge.id)).toEqual(["flow__first", "flow__second"]);
+  });
+
+  it.each([
+    ["missing endpoint", { from: SOURCE_CLOUD, to: "ghost" }],
+    ["same stock", { from: "pop", to: "pop" }],
+    ["wrong source cloud", { from: SINK_CLOUD, to: "pop" }],
+    ["cloud to cloud", { from: SOURCE_CLOUD, to: SINK_CLOUD }],
+  ])("rejects a complete but invalid explicit flow: %s", (_name, spec) => {
+    const pop = node("pop", "Population", "stock");
+    const flow = {
+      ...node("flow", "Flow", "flow", { flow: spec }),
+      links: [link("pop", "+")],
+    };
+    const nodes = [pop, flow];
+    const byId = new Map(nodes.map((entry) => [entry.id, entry]));
+
+    expect(resolveFlowSpec(flow, byId)).toBeNull();
+    expect(buildSfdPipeGeoms(nodes, buildNodeBoxes(nodes))).toEqual([]);
+    expect(isMaterialLink(flow, flow.links[0], byId)).toBe(false);
+  });
+
   it("computes a deterministic stock-flow fallback layout", () => {
     const a = node("a", "A", "stock");
     const b = node("b", "B", "stock");

@@ -5,6 +5,18 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.18] - 2026-07-21
+
+### Fixed
+
+- Quantitative loops encoded with one unambiguous legacy flow-to-stock material link now retain one complete, selectable badge and route in both CLD and SFD views.
+- Reciprocal CLD connectors remain visibly separated when one direction has authored curvature, so a material closure cannot disappear beneath its information connector.
+- Malformed explicit flow endpoints and ambiguous, dashed, or unknown-sign legacy material candidates remain fail-closed without partial badges or pipes.
+
+### Changed
+
+- `@neoloopy/cld-canvas` 0.1.6 now applies the same canonical material-topology resolution to loop discovery, SFD rendering, badge identity, and exact highlight state.
+
 ## [0.1.17] - 2026-07-21
 
 ### Fixed
@@ -209,6 +221,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   annotate them, and export to JSON / Markdown / Mermaid — fully local and
   offline.
 
+[0.1.18]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.18
 [0.1.17]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.17
 [0.1.16]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.16
 [0.1.15]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.15

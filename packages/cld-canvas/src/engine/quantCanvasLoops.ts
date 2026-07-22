@@ -3,9 +3,10 @@
  *
  * This is deliberately not a simulation or dominance implementation. It only
  * admits a static scalar cycle when every equation dependency maps to exactly
- * one declared information connector and every flow-to-stock effect maps to an
- * explicit first-class material endpoint. Any incomplete analysis returns no
- * quantitative prefix; declared qualitative loops remain available unchanged.
+ * one declared information connector and every flow-to-stock effect maps to one
+ * unambiguous material endpoint pair supported by the SFD renderer. Any
+ * incomplete analysis returns no quantitative prefix; declared qualitative
+ * loops remain available unchanged.
  */
 
 import {
@@ -20,6 +21,7 @@ import {
 import {
   flowOf,
   isCloud,
+  resolveFlowSpec,
   validateFlowEndpoints,
 } from "./sfd";
 
@@ -496,8 +498,27 @@ export function discoverCanvasLoops(
 
   for (const flow of nodes) {
     if (flow.type !== "flow") continue;
-    const spec = flowOf(flow);
-    if (!spec) return fail(`flow ${flow.label} lacks explicit material endpoints`);
+    const hasExplicitFlow = Object.prototype.hasOwnProperty.call(flow.extra, "flow");
+    const explicitSpec = flowOf(flow);
+    if (hasExplicitFlow && !explicitSpec) {
+      return fail(`flow ${flow.label} has malformed explicit material endpoints`);
+    }
+    if (!hasExplicitFlow) {
+      for (const link of flow.links) {
+        if (byId.get(link.to)?.type !== "stock") continue;
+        if (link.indirect) {
+          return fail(`legacy material candidate ${flow.id} -> ${link.to} is dashed`);
+        }
+        if (link.polarity !== "+" && link.polarity !== "-") {
+          return fail(`legacy material candidate ${flow.id} -> ${link.to} has unknown polarity`);
+        }
+      }
+    }
+    // Use the same canonical endpoint resolution as SFD painting. This keeps
+    // older, supported flow->stock material links resolvable without inventing
+    // topology, while resolveFlowSpec still rejects ambiguous legacy shapes.
+    const spec = explicitSpec ?? resolveFlowSpec(flow, byId);
+    if (!spec) return fail(`flow ${flow.label} lacks resolvable material endpoints`);
     const validation = validateFlowEndpoints(spec.from, spec.to, byId);
     if (!validation.ok) return fail(`invalid material endpoints for ${flow.label}: ${validation.error}`);
     const touches: Array<{ stockId: string; polarity: 1 | -1 }> = [];
