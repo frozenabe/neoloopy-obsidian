@@ -93,9 +93,13 @@ export function flowTouches(flow: VariableFile, byId: Map<string, VariableFile>)
     }
     return out;
   }
+  // A present explicit block is authoritative. Malformed explicit topology
+  // must not silently fall through to a different legacy interpretation.
+  if (Object.prototype.hasOwnProperty.call(flow.extra, "flow")) return out;
   for (const l of flow.links) {
     const t = byId.get(l.to);
     if (t?.type !== "stock") continue;
+    if (l.indirect) continue;
     if (l.polarity !== "+" && l.polarity !== "-") continue;
     out.push({ stockId: l.to, sign: l.polarity === "-" ? -1 : 1 });
   }
@@ -103,25 +107,34 @@ export function flowTouches(flow: VariableFile, byId: Map<string, VariableFile>)
 }
 
 /**
- * Material endpoints, stored-block first, then legacy flow->stock inference.
+ * Material endpoints, using an authoritative stored block when present and
+ * legacy flow->stock inference only when that block is absent.
  * Returns null when the flow cannot be represented as exactly one from/to pair.
  */
 export function resolveFlowSpec(flow: VariableFile, byId: Map<string, VariableFile>): FlowSpec | null {
   const stored = flowOf(flow);
-  if (stored) return stored;
+  if (stored) {
+    return validateFlowEndpoints(stored.from, stored.to, byId).ok ? stored : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(flow.extra, "flow")) return null;
+  for (const link of flow.links) {
+    if (byId.get(link.to)?.type !== "stock") continue;
+    if (link.indirect || (link.polarity !== "+" && link.polarity !== "-")) return null;
+  }
   const touched = flowTouches(flow, byId);
   const inflows = touched.filter((t) => t.sign > 0).map((t) => t.stockId);
   const outflows = touched.filter((t) => t.sign < 0).map((t) => t.stockId);
+  let inferred: FlowSpec | null = null;
   if (inflows.length === 1 && outflows.length === 1) {
-    return { from: outflows[0], to: inflows[0] };
+    inferred = { from: outflows[0], to: inflows[0] };
+  } else if (inflows.length === 1 && outflows.length === 0) {
+    inferred = { from: SOURCE_CLOUD, to: inflows[0] };
+  } else if (outflows.length === 1 && inflows.length === 0) {
+    inferred = { from: outflows[0], to: SINK_CLOUD };
   }
-  if (inflows.length === 1 && outflows.length === 0) {
-    return { from: SOURCE_CLOUD, to: inflows[0] };
-  }
-  if (outflows.length === 1 && inflows.length === 0) {
-    return { from: outflows[0], to: SINK_CLOUD };
-  }
-  return null;
+  return inferred && validateFlowEndpoints(inferred.from, inferred.to, byId).ok
+    ? inferred
+    : null;
 }
 
 export function validateFlowEndpoints(
@@ -161,9 +174,16 @@ export function isMaterialLink(
   byId: Map<string, VariableFile>,
 ): boolean {
   if (source.type !== "flow") return false;
-  const spec = flowOf(source);
-  if (spec) return link.to === spec.from || link.to === spec.to;
-  return byId.get(link.to)?.type === "stock";
+  const spec = resolveFlowSpec(source, byId);
+  if (!spec) return false;
+  if (Object.prototype.hasOwnProperty.call(source.extra, "flow")) {
+    return link.to === spec.from || link.to === spec.to;
+  }
+  if (link.indirect || (link.polarity !== "+" && link.polarity !== "-")) return false;
+  return (
+    (link.to === spec.from && link.polarity === "-") ||
+    (link.to === spec.to && link.polarity === "+")
+  );
 }
 
 /** Deterministic SFD fallback layout, ported from loopy core `sfd_layout.dart`. */

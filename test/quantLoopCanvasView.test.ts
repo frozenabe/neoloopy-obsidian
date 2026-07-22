@@ -3,11 +3,13 @@ import {
   CanvasLoopPath,
   DetectedLoop,
   GraphView,
+  LoopGraph,
   LoopType,
   SceneCache,
   VariableFile,
   buildEdgeGeoms,
   buildNodeBoxes,
+  discoverCanvasLoops,
   emptyVariable,
   hitEdge,
   loopHighlightFor,
@@ -51,12 +53,102 @@ function graph(nodes: VariableFile[], loops: DetectedLoop[]): GraphView {
     },
     nodes,
     loops,
-    labels: new Map(loops.map((loop, index) => [loop.key, `B${index + 1}`])),
+    labels: new Map(loops.map((loop, index) => [
+      loop.key,
+      `${loop.type === LoopType.reinforcing ? "R" : "B"}${index + 1}`,
+    ])),
     quant: true,
   };
 }
 
 describe("CRITICAL quantitative loop canvas representation", () => {
+  it("keeps the Futures legacy material closure visible, badged, and exact in CLD and SFD", () => {
+    const birthRate = variable("birth-rate", "BirthRate", "auxiliary", -120, 150, {
+      quant: { equation: "0.03" },
+    });
+    birthRate.links = [link("births")];
+    const births = variable("births", "Births", "flow", 0, 0, {
+      quant: { equation: "Population * BirthRate" },
+    });
+    // Supported pre-extra.flow topology: the flow's signed stock link is the
+    // first-class material closure used by the SFD renderer.
+    births.links = [link("population")];
+    const population = variable("population", "Population", "stock", 300, 0, {
+      quant: { initial: "100" },
+    });
+    population.links = [{ ...link("births"), curvature: -66 }];
+    const nodes = [birthRate, births, population];
+
+    const qualitative = new LoopGraph(nodes).detectLoops();
+    expect(qualitative).toHaveLength(1);
+    const resolved = discoverCanvasLoops(nodes, qualitative);
+    expect(resolved.analysisError).toBeNull();
+    expect(resolved.loops).toHaveLength(1);
+    const loop = resolved.loops[0];
+    expect(loop.identityMode).toBe("qualitative");
+    expect(loop.canvasPath?.legs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "causal",
+        edgeId: "population__births",
+        polarity: 1,
+      }),
+      expect.objectContaining({
+        kind: "material",
+        flowId: "births",
+        stockId: "population",
+        cldEdgeId: "births__population",
+        polarity: 1,
+      }),
+    ]));
+
+    const view = graph(nodes, resolved.loops);
+    const cache = new SceneCache((label) => label.length * 8);
+    const cld = cache.build(view, new Map(), new Map(), "cld")!;
+    expect(cld.labels.get(loop.key)).toBe("R1");
+    expect(cld.badges).toHaveLength(1);
+    expect(cld.edges.map((edge) => edge.id)).toEqual([
+      "birth-rate__births",
+      "births__population",
+      "population__births",
+    ]);
+    const closure = cld.edges.filter((edge) =>
+      edge.id === "births__population" || edge.id === "population__births");
+    expect(closure).toHaveLength(2);
+    expect(Math.sign(closure[0].mid.y) * Math.sign(closure[1].mid.y)).toBeLessThan(0);
+    expect(routePointerDown(cld, cld.badges.get(loop.key)!, 1, {
+      node: null,
+      edge: null,
+      loop: null,
+    })).toEqual({ kind: "selectBadge", loop: loop.key });
+
+    const sfd = cache.build(view, new Map(), new Map(), "sfd")!;
+    expect(sfd.badges).toHaveLength(1);
+    expect(sfd.loops).toEqual([loop]);
+    expect(routePointerDown(sfd, sfd.badges.get(loop.key)!, 1, {
+      node: null,
+      edge: null,
+      loop: null,
+    })).toEqual({ kind: "selectBadge", loop: loop.key });
+    expect(sfd.pipes).toEqual([
+      expect.objectContaining({
+        flowId: "births",
+        from: "~source",
+        to: "population",
+      }),
+    ]);
+
+    const highlight = loopHighlightFor(loop)!;
+    expect(highlight.nodeIds).toEqual(new Set(["births", "population"]));
+    expect(highlight.edgeIds).toEqual(new Set([
+      "births__population",
+      "population__births",
+    ]));
+    expect(highlight.edgeIds).not.toContain("birth-rate__births");
+    expect(highlight.pipeLegIds).toEqual(new Set([
+      materialPipeLegId("births", "population"),
+    ]));
+  });
+
   it("gives a two-node stock drain one CLD badge/projection and one exact SFD pipe leg", () => {
     const stock = variable("stock", "Storage", "stock", 0, 0, {
       quant: { initial: "100" },

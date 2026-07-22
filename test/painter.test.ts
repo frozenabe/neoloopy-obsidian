@@ -5,12 +5,14 @@ import {
   DetectedLoop,
   GraphView,
   LIGHT,
+  LoopGraph,
   LoopType,
   NodeBox,
   PaintUi,
   Scene,
   VariableFile,
   emptyVariable,
+  discoverCanvasLoops,
   loopHighlightFor,
   paint,
   SceneCache,
@@ -131,6 +133,68 @@ describe("painter — subsystem mark", () => {
 });
 
 describe("painter — CRITICAL quantitative SFD loop state", () => {
+  it("paints the resolved Futures R1 badge and full selected state in CLD and SFD", () => {
+    const causal = (to: string, curvature?: number) => ({
+      to,
+      polarity: "+" as const,
+      delay: false,
+      indirect: false,
+      nonlinear: false,
+      curvature,
+    });
+    const birthRate: VariableFile = {
+      ...emptyVariable("birth-rate", "BirthRate"),
+      x: -120,
+      y: 150,
+      links: [causal("births")],
+      extra: { quant: { equation: "0.03" } },
+    };
+    const births: VariableFile = {
+      ...emptyVariable("births", "Births"),
+      type: "flow",
+      links: [causal("population")],
+      extra: { quant: { equation: "Population * BirthRate" } },
+    };
+    const population: VariableFile = {
+      ...emptyVariable("population", "Population"),
+      type: "stock",
+      x: 300,
+      links: [causal("births", -66)],
+      extra: { quant: { initial: "100" } },
+    };
+    const nodes = [birthRate, births, population];
+    const resolved = discoverCanvasLoops(nodes, new LoopGraph(nodes).detectLoops());
+    expect(resolved.analysisError).toBeNull();
+    expect(resolved.loops).toHaveLength(1);
+    const loop = resolved.loops[0];
+    const graph = {
+      nodes,
+      loops: [loop],
+      labels: new Map([[loop.key, "R1"]]),
+    } as unknown as GraphView;
+    const cache = new SceneCache((label) => label.length * 8);
+    const cldScene = cache.build(graph, new Map(), new Map(), "cld")!;
+    const sfdScene = cache.build(graph, new Map(), new Map(), "sfd")!;
+    const selectedUi = {
+      ...ui,
+      selectedLoopKey: loop.key,
+      loopHighlight: loopHighlightFor(loop),
+    };
+
+    const cld = recordingCtx();
+    paint(cld.ctx, cldScene, new Camera(), LIGHT, selectedUi);
+    const sfd = recordingCtx();
+    paint(sfd.ctx, sfdScene, new Camera(), LIGHT, selectedUi);
+
+    expect(cld.texts).toContain("R1");
+    expect(sfd.texts).toContain("R1");
+    expect(cld.sets).toContainEqual(["strokeStyle", LIGHT.teal]);
+    expect(sfd.sets).toContainEqual(["strokeStyle", LIGHT.teal]);
+    expect(cld.sets).toContainEqual(["globalAlpha", 0.16]);
+    expect(sfd.sets).toContainEqual(["globalAlpha", 0.16]);
+    expect(sfd.args).toContainEqual(["setLineDash", [[7, 6]]]);
+  });
+
   it("paints the selected material leg amber while the unrelated cloud leg recedes", () => {
     const stock: VariableFile = {
       ...emptyVariable("stock", "Storage"),

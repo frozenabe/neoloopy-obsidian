@@ -485,8 +485,11 @@ const summary = endogeneity(graph.nodes, loops);
 
 `discoverCanvasLoops` adds a quantitative loop only when its complete executable
 route resolves to visible causal connectors and first-class material pipe legs.
-It preserves qualitative loop identity, deduplicates exact counterparts, and
-fails closed with `analysisError` instead of emitting a partial badge.
+Material endpoints may be explicit or use the unique, direct, signed legacy
+flow-to-stock encoding already supported by SFD rendering. It preserves
+qualitative loop identity, deduplicates exact counterparts, and fails closed
+with `analysisError` instead of emitting a partial badge when explicit topology
+is malformed or legacy topology is ambiguous, dashed, or unknown-sign.
 
 ## What is exported
 
