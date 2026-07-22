@@ -23,3 +23,14 @@ export class TFile extends TAbstractFile {}
 export class TFolder extends TAbstractFile {
   children: TAbstractFile[] = [];
 }
+
+/** Runtime-only values imported by canvas interaction classes under Vitest. */
+export class App {}
+
+export class Modal {
+  constructor(public app: App) {}
+  open(): void {}
+  close(): void {}
+}
+
+export function setIcon(): void {}

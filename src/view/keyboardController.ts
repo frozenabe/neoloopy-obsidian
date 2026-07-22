@@ -14,7 +14,7 @@
 
 import { App } from "obsidian";
 import { ShortcutsModal } from "./dialogs";
-import { Camera, GraphView, Point, Scene } from "@neoloopy/cld-canvas";
+import { Camera, DiagramViewMode, GraphView, Point, Scene } from "@neoloopy/cld-canvas";
 import { routeKey, stepId } from "./keyRouting";
 import {
   keyboardSelectableEdges,
@@ -29,6 +29,8 @@ export interface KeyboardHost {
   graph(): GraphView | null;
   selection(): { node: string | null; edge: string | null; loop: string | null };
   hasFolder(): boolean;
+  /** Stable model folder captured with delayed position persistence. */
+  positionPersistenceScope(): string | null;
   isRenaming(): boolean;
   listen(el: HTMLElement, type: string, cb: (e: Event) => void): void;
 
@@ -46,14 +48,28 @@ export interface KeyboardHost {
   createNodeAt(world: Point): Promise<void>;
   createConnection(from: string, to: string | null, at: Point): Promise<string | null>;
   previewNodePosition(id: string, x: number, y: number): void;
-  persistNodePosition(id: string, x: number, y: number): Promise<void>;
+  persistNodePosition(
+    id: string,
+    x: number,
+    y: number,
+    coordinateSpace?: DiagramViewMode,
+    persistenceScope?: string | null,
+  ): Promise<void>;
   deleteSelection(): Promise<void>;
+}
+
+interface PendingNudgeSave {
+  timer: number;
+  id: string;
+  position: Point;
+  coordinateSpace: DiagramViewMode;
+  persistenceScope: string | null;
 }
 
 export class KeyboardController {
   private navAnchor: string | null = null; // last node the keyboard "stood on"
   private keyLinkFrom: string | null = null; // node armed for a keyboard link (L)
-  private nudgeSaveTimer: number | null = null; // debounced persist of arrow-nudges
+  private readonly nudgeSaves = new Map<string, PendingNudgeSave>();
 
   constructor(private readonly canvas: HTMLCanvasElement, private readonly host: KeyboardHost) {
     host.listen(canvas, "keydown", (e) => this.onKeyDown(e as KeyboardEvent));
@@ -73,9 +89,9 @@ export class KeyboardController {
   reset(): void {
     this.clearLink();
     this.navAnchor = null;
-    if (this.nudgeSaveTimer !== null) {
-      window.clearTimeout(this.nudgeSaveTimer);
-      this.nudgeSaveTimer = null;
+    for (const [key, pending] of [...this.nudgeSaves]) {
+      window.clearTimeout(pending.timer);
+      this.persistScheduledNudge(key);
     }
   }
 
@@ -298,10 +314,12 @@ export class KeyboardController {
       const current = this.centerOf(node.id);
       if (!current) return;
       const step = big ? 40 : 8;
-      this.host.previewNodePosition(node.id, current.x + dx * step, current.y + dy * step);
+      const coordinateSpace = this.host.scene()?.mode ?? "cld";
+      const next = { x: current.x + dx * step, y: current.y + dy * step };
+      this.host.previewNodePosition(node.id, next.x, next.y);
       this.host.rebuildScene();
       this.host.render();
-      this.scheduleNudgeSave(node.id);
+      this.scheduleNudgeSave(node.id, next, coordinateSpace);
       return;
     }
     const step = big ? 160 : 40;
@@ -310,13 +328,26 @@ export class KeyboardController {
     this.host.render();
   }
 
-  private scheduleNudgeSave(id: string): void {
-    if (this.nudgeSaveTimer !== null) window.clearTimeout(this.nudgeSaveTimer);
-    this.nudgeSaveTimer = window.setTimeout(() => {
-      this.nudgeSaveTimer = null;
-      const pos = this.centerOf(id);
-      if (pos) void this.host.persistNodePosition(id, pos.x, pos.y);
-    }, 450);
+  private scheduleNudgeSave(id: string, position: Point, coordinateSpace: DiagramViewMode): void {
+    const persistenceScope = this.host.positionPersistenceScope();
+    const key = JSON.stringify([persistenceScope, coordinateSpace, id]);
+    const prior = this.nudgeSaves.get(key);
+    if (prior) window.clearTimeout(prior.timer);
+    const timer = window.setTimeout(() => this.persistScheduledNudge(key), 450);
+    this.nudgeSaves.set(key, { timer, id, position, coordinateSpace, persistenceScope });
+  }
+
+  private persistScheduledNudge(key: string): void {
+    const pending = this.nudgeSaves.get(key);
+    if (!pending) return;
+    this.nudgeSaves.delete(key);
+    void this.host.persistNodePosition(
+      pending.id,
+      pending.position.x,
+      pending.position.y,
+      pending.coordinateSpace,
+      pending.persistenceScope,
+    );
   }
 
   /** +/−: zoom a step about the viewport center, like the app's keyboard zoom. */
