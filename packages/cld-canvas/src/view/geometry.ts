@@ -25,8 +25,23 @@ export function loopsForMode(
   mode: DiagramViewMode,
 ): DetectedLoop[] {
   return mode === "sfd"
-    ? loops.filter((loop) => loop.canvasPath?.hasMaterialLeg === true)
+    ? loops.filter((loop) =>
+        loop.canvasPath !== undefined &&
+        (loop.identityMode === "qualitative" || loop.canvasPath.hasMaterialLeg))
     : loops;
+}
+
+/** Keep a selected badge only when that exact loop exists in the next view. */
+export function retainedLoopKeyForMode(
+  loops: DetectedLoop[],
+  selectedKey: string | null,
+  mode: DiagramViewMode,
+): string | null {
+  if (selectedKey === null) return null;
+  const selected = loops.find((loop) => loop.key === selectedKey);
+  return selected && loopsForMode([selected], mode).length === 1
+    ? selected.key
+    : null;
 }
 
 export interface NodeBox {

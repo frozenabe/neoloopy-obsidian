@@ -73,9 +73,10 @@ thinking already lives.
   **nonlinear**. One command auto-tidies the layout.
 - 🔁 **Automatic loop detection.** Reinforcing (R) and balancing (B) feedback
   loops are found for you and labelled R1/B1… directly on the diagram.
-  Executable quantitative loops also appear when their complete path resolves:
-  CLD mode projects each material effect as a causal link, while SFD mode
-  highlights the corresponding stock-flow pipe.
+  Declared loops remain complete in SFD when their path resolves, with material
+  closures highlighted as stock-flow pipes. Executable quantitative-only loops
+  also appear when their complete path resolves; CLD projects each material
+  effect as a causal link.
 - ⚡ **Live edits.** Change a note in another pane — or let an AI agent edit the
   vault — and the canvas updates instantly, flashing exactly what changed.
 - 🧭 **System insight & navigation.** A side panel surfaces detected loops and

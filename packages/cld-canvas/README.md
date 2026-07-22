@@ -483,13 +483,20 @@ const metrics = loopGraph.metrics();
 const summary = endogeneity(graph.nodes, loops);
 ```
 
-`discoverCanvasLoops` adds a quantitative loop only when its complete executable
-route resolves to visible causal connectors and first-class material pipe legs.
+`discoverCanvasLoops` first enriches each declared qualitative loop whose whole
+authored route resolves to exact visible connectors or material pipe legs, even
+when quantitative analysis is unavailable or incomplete. It adds a synthesized
+quantitative loop only when its complete executable route resolves just as
+exactly.
 Material endpoints may be explicit or use the unique, direct, signed legacy
 flow-to-stock encoding already supported by SFD rendering. It preserves
-qualitative loop identity, deduplicates exact counterparts, and fails closed
-with `analysisError` instead of emitting a partial badge when explicit topology
-is malformed or legacy topology is ambiguous, dashed, or unknown-sign.
+qualitative loop identity and deduplicates exact counterparts. Quantitative
+discovery failures surface as `analysisError` and add no partial quantitative
+badge. A declared qualitative loop whose exact canvas route cannot be resolved
+keeps its established CLD identity and badge but is excluded from SFD; that
+qualitative exclusion by itself does not set `analysisError`. SFD retains every
+exactly resolved qualitative loop; a quantitative-only SFD badge additionally
+requires at least one first-class material leg.
 
 ## What is exported
 

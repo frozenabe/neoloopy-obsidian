@@ -43,6 +43,7 @@ import {
   loopHighlightFor,
   paint,
   parentPath,
+  retainedLoopKeyForMode,
   resolvedLoopNoteKey,
   resolveTheme,
 } from "@neoloopy/cld-canvas";
@@ -710,12 +711,11 @@ export class CanvasView extends ItemView {
   private setDiagramMode(mode: DiagramViewMode): void {
     if (this.diagramMode === mode) return;
     this.diagramMode = mode;
-    const selected = this.selLoop
-      ? this.graph?.loops.find((loop) => loop.key === this.selLoop) ?? null
-      : null;
-    const keepLoop = selected && (mode === "cld" || selected.canvasPath?.hasMaterialLeg)
-      ? selected.key
-      : null;
+    const keepLoop = retainedLoopKeyForMode(
+      this.graph?.loops ?? [],
+      this.selLoop,
+      mode,
+    );
     this.select(null, null, keepLoop);
     this.bowSigns.clear();
     this.rebuildScene();

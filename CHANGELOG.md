@@ -5,6 +5,18 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.19] - 2026-07-22
+
+### Fixed
+
+- Declared qualitative loops retain complete, selectable badges in both CLD and SFD whenever their exact visible route resolves, including causal-only SFD routes and stock-flow material closures.
+- Switching views preserves only a loop with a complete representation in the destination view, while unresolved SFD routes show an honest empty-state explanation instead of a broken or partial loop.
+- Qualitative and quantitative counterparts deduplicate to one stable identity, and ambiguous, unknown-sign, arrayed, composed, or incomplete quantitative paths remain fail-closed.
+
+### Changed
+
+- `@neoloopy/cld-canvas` 0.1.7 now resolves qualitative routes independently of quantitative analysis and applies the same exact badge, polarity, material-pipe, and mode-selection contract in Obsidian and Publish.
+
 ## [0.1.18] - 2026-07-21
 
 ### Fixed
@@ -221,6 +233,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   annotate them, and export to JSON / Markdown / Mermaid — fully local and
   offline.
 
+[0.1.19]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.19
 [0.1.18]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.18
 [0.1.17]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.17
 [0.1.16]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.16
