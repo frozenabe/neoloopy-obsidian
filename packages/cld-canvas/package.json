@@ -1,6 +1,6 @@
 {
   "name": "@neoloopy/cld-canvas",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "author": "neoloopy",
   "license": "MIT",
   "description": "Framework-agnostic CLD canvas renderer + in-memory edit engine (shared by the neoloopy Obsidian plugin and neoloopy.com).",

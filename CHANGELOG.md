@@ -5,6 +5,17 @@ All notable changes to the neoloopy Obsidian plugin are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.20] - 2026-07-22
+
+### Fixed
+
+- SFD node drags keep rendered geometry, hit testing, material pipes, selection chrome, and persisted `sfd` coordinates synchronized without changing the CLD layout.
+- Rapid keyboard nudges in different views or models persist independently in the exact model and coordinate space where each movement occurred.
+
+### Changed
+
+- `@neoloopy/cld-canvas` 0.1.8 adds permanent pointer, scene-cache, pipe, hit-test, chrome, persistence, and fail-closed regression coverage shared by Obsidian and Publish.
+
 ## [0.1.19] - 2026-07-22
 
 ### Fixed
@@ -233,6 +244,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   annotate them, and export to JSON / Markdown / Mermaid — fully local and
   offline.
 
+[0.1.20]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.20
 [0.1.19]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.19
 [0.1.18]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.18
 [0.1.17]: https://github.com/frozenabe/neoloopy-obsidian/releases/tag/0.1.17

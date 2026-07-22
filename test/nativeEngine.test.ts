@@ -242,15 +242,19 @@ describe("NativeEngine — SFD topology", () => {
     await expect(engine.setFlowEndpoints(folder, flow.id, aux.id, SINK_CLOUD)).rejects.toThrow(/stock/i);
   });
 
-  it("writes sfd positions separately from CLD x/y", async () => {
+  it("CRITICAL: writes SFD positions separately from CLD x/y and other metadata", async () => {
     const { engine } = makeEngine();
     const { folder } = await engine.createModel("SFD");
     const stock = await engine.addVariable(folder, { label: "Population", type: "stock", x: 10, y: 20 });
+    await engine.setEquation(folder, stock.id, { initial: "100", units: "people" });
+    const before = (await engine.loadGraph(folder)).nodes.find((n) => n.id === stock.id)!;
     await engine.moveVariableSfd(folder, stock.id, 300, 400);
     const node = (await engine.loadGraph(folder)).nodes.find((n) => n.id === stock.id)!;
     expect(node.x).toBe(10);
     expect(node.y).toBe(20);
     expect(node.extra.sfd).toEqual({ x: 300, y: 400 });
+    expect(node.extra.quant).toEqual(before.extra.quant);
+    expect(node.rev).toBe(before.rev);
   });
 
   it("reclouds flow endpoints when a connected stock is removed", async () => {

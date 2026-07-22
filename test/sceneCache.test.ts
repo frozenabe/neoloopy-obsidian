@@ -4,10 +4,13 @@ import {
   DetectedLoop,
   GraphView,
   LoopType,
+  SINK_CLOUD,
   SceneCache,
   VariableFile,
   buildNodeBoxes,
   emptyVariable,
+  extraWithSfdPosition,
+  hitNode,
 } from "@neoloopy/cld-canvas";
 
 function node(id: string, x: number, y: number, label = id, links: { to: string; curvature?: number }[] = []): VariableFile {
@@ -106,6 +109,35 @@ describe("SceneCache.build — dirty-tracking", () => {
     const second = cache.build(g, noBow(), noOverrides());
     expect(second).not.toBe(first);
     expect(second!.boxes.get("a")!.cx).toBe(80);
+  });
+
+  it("CRITICAL: rebuilds SFD boxes, hits, and material pipes after an in-place extra.sfd move", () => {
+    const stock = node("stock", 10, 20, "Stock");
+    stock.type = "stock";
+    stock.extra = extraWithSfdPosition(stock.extra, 120, 140);
+    const drain = node("drain", 40, 50, "Drain");
+    drain.type = "flow";
+    drain.extra = {
+      ...extraWithSfdPosition(drain.extra, 320, 140),
+      flow: { from: "stock", to: SINK_CLOUD },
+    };
+    const g = graph([stock, drain]);
+    const cache = new SceneCache((s) => s.length * 10);
+
+    const first = cache.build(g, noBow(), noOverrides(), "sfd")!;
+    const firstPipe = first.pipes[0];
+    expect(first.boxes.get("stock")).toMatchObject({ cx: 120, cy: 140 });
+    expect(hitNode(first.boxes, { x: 120, y: 140 })).toBe("stock");
+
+    stock.extra = extraWithSfdPosition(stock.extra, 220, 240);
+    const second = cache.build(g, noBow(), noOverrides(), "sfd")!;
+
+    expect(second).not.toBe(first);
+    expect(second.boxes.get("stock")).toMatchObject({ cx: 220, cy: 240 });
+    expect(hitNode(second.boxes, { x: 220, y: 240 })).toBe("stock");
+    expect(hitNode(second.boxes, { x: 120, y: 140 })).toBeNull();
+    expect(second.pipes[0].fromPoint).not.toEqual(firstPipe.fromPoint);
+    expect(stock).toMatchObject({ x: 10, y: 20 });
   });
 
   it("rebuilds when a link curvature changes (a bow drag, same graph object)", () => {

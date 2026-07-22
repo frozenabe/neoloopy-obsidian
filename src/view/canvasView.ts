@@ -246,6 +246,7 @@ export class CanvasView extends ItemView {
       graph: () => this.graph,
       selection: () => ({ node: this.selNode, edge: this.selEdge, loop: this.selLoop }),
       hasFolder: () => this.folder !== null,
+      positionPersistenceScope: () => this.folder,
       isRenaming: () => this.renameInput !== null,
       listen: (el, type, cb) => this.registerDomEvent(el, type as keyof HTMLElementEventMap, cb),
       select: (node, edge, loop) => this.select(node, edge, loop),
@@ -261,7 +262,8 @@ export class CanvasView extends ItemView {
       createNodeAt: (world) => this.createNodeAt(world),
       createConnection: (from, to, at) => this.createConnection(from, to, at),
       previewNodePosition: (id, x, y) => this.previewNodePosition(id, x, y),
-      persistNodePosition: (id, x, y) => this.persistNodePosition(id, x, y),
+      persistNodePosition: (id, x, y, coordinateSpace, persistenceScope) =>
+        this.persistNodePosition(id, x, y, coordinateSpace, persistenceScope),
       deleteSelection: () => this.deleteSelection(),
     });
 
@@ -1037,12 +1039,19 @@ export class CanvasView extends ItemView {
 
   /** Persist a node's new position after a pointer drag or keyboard nudge (the
    *  move is already applied to the in-memory graph + scene). */
-  private async persistNodePosition(id: string, x: number, y: number): Promise<void> {
-    if (!this.folder) return;
-    if (this.diagramMode === "sfd") {
-      await this.model.moveVariableSfd(this.folder, id, x, y);
+  private async persistNodePosition(
+    id: string,
+    x: number,
+    y: number,
+    coordinateSpace: DiagramViewMode = this.diagramMode,
+    persistenceScope?: string | null,
+  ): Promise<void> {
+    const folder = persistenceScope === undefined ? this.folder : persistenceScope;
+    if (!folder) return;
+    if (coordinateSpace === "sfd") {
+      await this.model.moveVariableSfd(folder, id, x, y);
     } else {
-      await this.model.moveVariable(this.folder, id, x, y);
+      await this.model.moveVariable(folder, id, x, y);
     }
   }
 
